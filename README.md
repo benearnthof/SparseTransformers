@@ -1,5 +1,6 @@
-# SparseTransformers
-Reproducing the Paper Generating Long Sequences with Sparse Transformers by Child et al. In Pytorch
+# Generating Long Sequences with Sparse Transformers
+Reproducing the paper Generating Long Sequences with Sparse Transformers by Child et al. In Pytorch
+https://arxiv.org/abs/1904.10509
 
 Currently this implementation is a prototype, many fixes and adjustments need to be done to accommodate the original paper. 
 So far the trimmed down basic implementation achieves 2.87 bits per byte on CIFAR-10 with a 19M parameter vanilla attention transformer after a short test run of 30k samples. 
