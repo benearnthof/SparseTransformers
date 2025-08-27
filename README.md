@@ -17,3 +17,4 @@ What still needs to be implemented:
 * correct positional encoding
 * correct data loading with respect to the sequence end
 * visualization of activation maps like in fig. 1 of the paper
+* experiment with torch.compile and torch.tune, FSDP, CPU offloading etc.
