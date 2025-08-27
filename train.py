@@ -307,7 +307,7 @@ from torch.distributed import init_process_group, destroy_process_group
 # I/O
 out_dir = 'out'
 eval_interval = 2000
-log_interval = 1
+log_interval = 10
 eval_iters = 200
 eval_only = False # if True, script exits right after the first eval
 always_save_checkpoint = True # if True, always save a checkpoint after each eval
@@ -592,7 +592,21 @@ if ddp:
 #   We should repeat the last pixel twice to avoid cross image contamination
 
 # TODO: test learning rate warmup and other hyperparameters 
+# TODO: DDP training
+# TODO: Proper logging with image samples
+# TODO: Checkpointing
+# TODO: attention visualization for masked images
+# TODO: visualize attention matrices for checkpoint
+#   maybe during training? 
 
+# current best with flawed implementation: 
+# iter 610: loss 3.3404, time 8406.33ms, mfu 57.64%
+# iter 611: loss 3.3030, time 8354.34ms, mfu 57.65%
+# iter 612: loss 3.2933, time 8343.33ms, mfu 57.67%
+# iter 613: loss 3.3958, time 8357.51ms, mfu 57.67%
+# iter 614: loss 3.3052, time 8345.89ms, mfu 57.69%
+# iter 615: loss 3.2869, time 8353.94ms, mfu 57.69%
+# iter 616: loss 3.3050, time 8343.27ms, mfu 57.70%
 
 # Current model seems to learn, albeit extremely slowly.
 # Very nice resource
