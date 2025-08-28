@@ -35,14 +35,14 @@ wandb_run_name = 'cifar-10' # 'run' + str(time.time())
 # data
 dataset = 'cifar-10'
 gradient_accumulation_steps = 1 # used to simulate larger batch sizes
-batch_size = 64 # if gradient_accumulation_steps > 1, this is the micro-batch size
+batch_size = 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
 # 6 seconds per batch for 24 batch size and 30 gradient accumulation steps
 # 300 ms for 48 batch size and 1 gradient accumulation step
 block_size = 3072
 
 # model
 # For testing purposes
-n_layer = 24
+n_layer = 64
 n_head = 2
 n_embd = 256
 # TODO: add dropout for paper replication
