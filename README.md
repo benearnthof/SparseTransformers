@@ -3,21 +3,80 @@ Reproducing the paper Generating Long Sequences with Sparse Transformers by Chil
 https://arxiv.org/abs/1904.10509
 
 Currently this implementation is a prototype, many fixes and adjustments need to be done to accommodate the original paper. 
-So far the trimmed down basic implementation achieves 2.87 bits per byte on CIFAR-10 with a 19M parameter vanilla attention transformer after a short test run of 30k samples. 
+So far the trimmed down basic implementation achieves around 3 bits per byte on CIFAR-10 with a 19M parameter vanilla attention transformer after a short test run of 30k samples. 
 The paper trained for 120 epochs of 48k images each so right now I'm satisfied with this very slimmed down prototype. 
 
-Update: A 64 layer vanilla testrun with neither gradient accumulation nor dropout was able to overfit to the training set achieving loss of 0.15. More tuning of hyperparams and is needed as well as the points listed below.
+Update: A 128 layer dense attention testrun at batch size 64 can be trained to the point of overfitting to the training set, despite the missing parts listed below.
 
-What still needs to be implemented: 
-* Efficient sparse kernels
-* Half size kq projections
-* half size linear layers
-* activation checkpointing to decrease memory consumption and allow for 128 layer deep model
-* ddp training
-* proper checkpointing
-* proper logging
-* correct positional encoding
-* correct data loading with respect to the sequence end
-* visualization of activation maps like in fig. 1 of the paper
-* experiment with torch.compile and torch.tune, FSDP, CPU offloading etc.
-* generating samples during training
+# Notes and todolist  
+## Memory profiling & Performance  
+https://pytorch.org/blog/activation-checkpointing-techniques/  
+https://docs.pytorch.org/docs/stable/checkpoint.html  
+With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
+* Flame Graph profiling of model to visualize memory usage before and after gradient checkpointing
+* Move number of checkpointing steps to config
+* Dense Attention (flashattention) with full training config uses 80% of A100 memory at 
+batch size 16 for cifar-10
+* Compare Vanilla to FlashAttention on different hardware
+* DDP Training
+* examine impact of batch size on training stability
+* larger batch sizes may be beneficial for transformers
+### Automatic mixed precision/Mixed precision training: 
+https://docs.pytorch.org/docs/stable/amp.html
+already implemented with ctx context manager
+
+## Functionality
+* sample during training & eval, log images on wandb
+* Adjust the positional encoding for image data
+* Implement sparse kernels
+* Apply Dropout only at the end of each residual addition.
+* Use pre-activation residual block of https://arxiv.org/pdf/1603.05027
+* Fix last byte leak in data loader (We should repeat the penultimate pixel twice to avoid cross image contamination)
+* resume from checkpoint
+
+## Visualization
+* attention visualization for masked images
+* visualize attention matrices for checkpoint (maybe during training?) 
+
+# Additional Resources
+https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial15/Vision_Transformer.html
+
+# On positional Encoding
+In addition to the embedding of input symbols, positional embeddings are typically used in Transformers and other location-agnostic architectures to encode the spatial relationships of data (Gehring et al., 2017), (Parmar et al., 2018).
+
+We found using learned embeddings which either encoded the structure of the data or the factorized attention patterns were important for performance of our models.
+
+We added either $n_{e m b}=d_{d a t a}$ or $n_{e m b}=d_{a t t n}$ embeddings to each input location, where $d_{\text {data }}$ refers to the number of dimensions of the data, and $d_{a t t n}$ is the number of dimensions of the factorized attention. If $\mathbf{x}_i$ is the one-hot encoded $i$ th element in the sequence, and $\mathbf{o}_i^{(j)}$ represents the one-hot encoded position of $\mathrm{x}_i$ in the $j$ th dimension $\left(1 \leq j \leq n_{e m b}\right)$, then:
+
+$$
+\operatorname{embed}\left(X, W_e\right)=\left(\mathbf{x}_i W_e+\sum_{j=1}^{n_{e m b}} \mathbf{o}_i^{(j)} W_j\right)_{\mathbf{x}_i \in X}
+$$
+For images, we used data embeddings, where $d_{\text {data }}=3$ for the row, column, and channel location of each input byte. For text and audio, we used two-dimensional attention embeddings, where $d_{\text {attn }}=2$ and the index corresponds to each position's row and column index in a matrix of width equal to the stride.
+
+Implementing this should look something like this: 
+```python
+self.row_emb = nn.Embedding(32, config.n_embd)     # 32 rows
+self.col_emb = nn.Embedding(32, config.n_embd)     # 32 cols
+self.chan_emb = nn.Embedding(3, config.n_embd)     # RGB channels
+
+tok_emb = self.transformer.wte(idx)  # (B, T, n_embd)
+
+# decode the flattened index (0..3071) into (row, col, channel)
+b, t = idx.shape
+rows = torch.arange(0, 32, device=idx.device).repeat_interleave(32*3)
+cols = torch.arange(0, 32, device=idx.device).repeat(32*3)
+chans = torch.arange(0, 3, device=idx.device).repeat(32*32)
+
+rows = rows[:t]
+cols = cols[:t]
+chans = chans[:t]
+
+row_emb = self.row_emb(rows)[None, :, :].expand(b, -1, -1)
+col_emb = self.col_emb(cols)[None, :, :].expand(b, -1, -1)
+chan_emb = self.chan_emb(chans)[None, :, :].expand(b, -1, -1)
+
+x = tok_emb + row_emb + col_emb + chan_emb
+x = self.transformer.drop(x)
+```
+Where we can in turn remove the old weighted position embedding.
+
