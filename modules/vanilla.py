@@ -8,6 +8,9 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+# gradient/activation checkpointing
+from torch.utils.checkpoint import checkpoint_sequential
+
 class LayerNorm(nn.Module):
   """LayerNorm with optional bias"""
   def __init__(self, ndim, bias):
@@ -162,8 +165,16 @@ class GPT(nn.Module):
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
-        for block in self.transformer.h:
-            x = block(x)
+        
+        # basic checkpointing
+        # we split the transformer into 8 number of blocks specified in config
+        # TODO: move parameter to config
+        segments = 8
+        x = checkpoint_sequential(self.transformer.h, segments, x, use_reentrant=False)
+
+        # for block in self.transformer.h:
+        #     x = block(x)
+
         x = self.transformer.ln_f(x)
 
         if targets is not None:
