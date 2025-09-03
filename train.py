@@ -15,8 +15,12 @@ from torch.distributed import init_process_group, destroy_process_group
 from modules.vanilla import GPT, GPTConfig
 from omegaconf import OmegaConf
 import yaml
+import json
 
 cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-dense-grad-checkpointing.yaml")
+
+with open("config.json", "w") as f:
+    json.dump(dict(cfg), f, indent=2)
 
 # system
 ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
@@ -129,7 +133,10 @@ def get_lr(it):
 # logging
 if cfg.wandb_log and master_process:
     import wandb
-    wandb.init(project=cfg.wandb_project, name=cfg.wandb_run_name + f"{str(time.time())}")
+    wandb.init(project=cfg.wandb_project, name=cfg.wandb_run_name + f"{str(time.time())}", config=dict(cfg))
+    artifact = wandb.Artifact("config", type="config")
+    artifact.add_file("config.json")
+    wandb.log_artifact(artifact)
 
 # training loop
 X, Y = get_batch('train') # fetch the very first batch
