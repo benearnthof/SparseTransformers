@@ -8,8 +8,8 @@ The paper trained for 120 epochs of 48k images each so right now I'm satisfied w
 
 Update: A 128 layer dense attention testrun at batch size 64 can be trained to the point of overfitting to the training set, despite the missing parts listed below.
 
-# Notes and todolist  
-## Memory profiling & Performance  
+## Notes and todo list  
+### Memory profiling & Performance  
 https://pytorch.org/blog/activation-checkpointing-techniques/  
 https://docs.pytorch.org/docs/stable/checkpoint.html  
 With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
@@ -21,11 +21,11 @@ batch size 16 for cifar-10
 * DDP Training
 * examine impact of batch size on training stability
 * larger batch sizes may be beneficial for transformers
-### Automatic mixed precision/Mixed precision training: 
+#### Automatic mixed precision/Mixed precision training: 
 https://docs.pytorch.org/docs/stable/amp.html
 already implemented with ctx context manager
 
-## Functionality
+### Functionality
 * sample during training & eval, log images on wandb
 * Adjust the positional encoding for image data
 * Implement sparse kernels
@@ -34,14 +34,14 @@ already implemented with ctx context manager
 * Fix last byte leak in data loader (We should repeat the penultimate pixel twice to avoid cross image contamination)
 * resume from checkpoint
 
-## Visualization
+### Visualization
 * attention visualization for masked images
 * visualize attention matrices for checkpoint (maybe during training?) 
 
-# Additional Resources
+### Additional Resources
 https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial15/Vision_Transformer.html
 
-# On positional Encoding
+### On positional Encoding
 In addition to the embedding of input symbols, positional embeddings are typically used in Transformers and other location-agnostic architectures to encode the spatial relationships of data (Gehring et al., 2017), (Parmar et al., 2018).
 
 We found using learned embeddings which either encoded the structure of the data or the factorized attention patterns were important for performance of our models.
