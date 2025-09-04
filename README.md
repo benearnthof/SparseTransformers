@@ -9,20 +9,20 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 
 ## Notes and todo list  
 ### Memory profiling & Performance
+#### Features
 https://pytorch.org/blog/activation-checkpointing-techniques/  
 https://docs.pytorch.org/docs/stable/checkpoint.html  
-With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
-* Flame Graph profiling of model to visualize memory usage before and after gradient checkpointing
-* Move number of checkpointing steps to config
-* Dense Attention (flashattention) with full training config uses 80% of A100 memory at 
-batch size 16 for cifar-10
-* Compare Vanilla to FlashAttention on different hardware
-* DDP Training
-* examine impact of batch size on training stability
-* larger batch sizes may be beneficial for transformers
-#### Automatic mixed precision/Mixed precision training: 
-https://docs.pytorch.org/docs/stable/amp.html
-already implemented with ctx context manager
+* Dense Attention (flashattention) with full training config uses 80% of A100 memory at batch size 16 for CIFAR-10.  
+* With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
+* The number of activation checkpoints can be set in the model config.  
+* Automatic mixed precision
+
+#### TODO
+* Flame Graph profiling of model to visualize memory usage before and after gradient checkpointing & compare impact of hardware
+* Compare Vanilla to FlashAttention on different hardware  
+* DDP Training  
+* examine impact of batch size on training stability  
+* larger batch sizes may be beneficial for transformers  
 
 ### Functionality
 #### Features
@@ -36,6 +36,7 @@ already implemented with ctx context manager
 * resume training from checkpoint
 
 ### Visualization
+#### TODO
 * attention visualization for masked images
 * visualize attention matrices for checkpoint (maybe during training?) 
 
