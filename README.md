@@ -2,11 +2,10 @@
 Reproducing the paper Generating Long Sequences with Sparse Transformers by Child et al. In Pytorch
 https://arxiv.org/abs/1904.10509
 
-Currently this implementation is a prototype, many fixes and adjustments need to be done to accommodate the original paper. 
-So far the trimmed down basic implementation achieves around 3 bits per byte on CIFAR-10 with a 19M parameter vanilla attention transformer after a short test run of 30k samples. 
-The paper trained for 120 epochs of 48k images each so right now I'm satisfied with this very slimmed down prototype. 
-
-Update: A 128 layer dense attention testrun at batch size 64 can be trained to the point of overfitting to the training set, despite the missing parts listed below.
+Currently this implementation is a prototype, some adjustments need to be made to accommodate the original paper. 
+So far the trimmed down basic implementation can train on CIFAR-10. A 50m parameter dense attention transformer achieved the following results after ~4 epochs:
+![https://raw.githubusercontent.com/benearnthof/SparseTransformers/refs/heads/main/assets/eval_3000.jpg](https://raw.githubusercontent.com/benearnthof/SparseTransformers/refs/heads/main/assets/eval_3000.jpg)
+The paper trained for 120 epochs of 48k images each (5760000 samples total) so right now I'm satisfied with this very slimmed down prototype. 
 
 ## Notes and todo list  
 ### Memory profiling & Performance
