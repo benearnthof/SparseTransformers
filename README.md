@@ -27,7 +27,7 @@ https://docs.pytorch.org/docs/stable/checkpoint.html
 ### Functionality
 #### Features
 * During evaluation masked images are sampled and logged on wandb with their respective predictions
-* To avoid data leakage from image to image the y[-1] is set to x[-1]
+* To avoid data leakage from image to image the last target byte y[-1] is set to the last input byte x[-1]
 #### TODO
 * Adjust the positional encoding for image data
 * Implement sparse kernels
