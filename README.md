@@ -9,7 +9,7 @@ The paper trained for 120 epochs of 48k images each so right now I'm satisfied w
 Update: A 128 layer dense attention testrun at batch size 64 can be trained to the point of overfitting to the training set, despite the missing parts listed below.
 
 ## Notes and todo list  
-### Memory profiling & Performance  
+### Memory profiling & Performance
 https://pytorch.org/blog/activation-checkpointing-techniques/  
 https://docs.pytorch.org/docs/stable/checkpoint.html  
 With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
@@ -26,13 +26,15 @@ https://docs.pytorch.org/docs/stable/amp.html
 already implemented with ctx context manager
 
 ### Functionality
-* sample during training & eval, log images on wandb
+#### Features
+* During evaluation masked images are sampled and logged on wandb with their respective predictions
+* To avoid data leakage from image to image the y[-1] is set to x[-1]
+#### TODO
 * Adjust the positional encoding for image data
 * Implement sparse kernels
 * Apply Dropout only at the end of each residual addition.
 * Use pre-activation residual block of https://arxiv.org/pdf/1603.05027
-* Fix last byte leak in data loader (We should repeat the penultimate pixel twice to avoid cross image contamination)
-* resume from checkpoint
+* resume training from checkpoint
 
 ### Visualization
 * attention visualization for masked images
