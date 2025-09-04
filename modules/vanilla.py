@@ -107,6 +107,7 @@ class GPTConfig:
     n_embd: int = 256
     dropout: float = 0.25
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    rematerialization_steps: int = 8 # activation checkpointing to reduce GPU memory requirements of very deep nets
 
 class GPT(nn.Module):
 
@@ -169,7 +170,7 @@ class GPT(nn.Module):
         # basic checkpointing
         # we split the transformer into 8 number of blocks specified in config
         # TODO: move parameter to config
-        segments = 8
+        segments = self.config.rematerialization_steps
         x = checkpoint_sequential(self.transformer.h, segments, x, use_reentrant=False)
 
         # for block in self.transformer.h:

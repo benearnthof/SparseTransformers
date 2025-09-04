@@ -13,11 +13,12 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from modules.vanilla import GPT, GPTConfig
+from utils import get_batch, generate_samples 
 from omegaconf import OmegaConf
 import yaml
 import json
 
-cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-dense-grad-checkpointing.yaml")
+cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-overfit.yaml")
 
 with open("config.json", "w") as f:
     json.dump(dict(cfg), f, indent=2)
@@ -48,31 +49,20 @@ ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=
 
 os.makedirs("data_dir", exist_ok=True)
 
-def get_batch(split):
-    # We recreate np.memmap every batch to avoid a memory leak, as per
-    # https://stackoverflow.com/questions/45132940/numpy-memmap-memory-usage-want-to-iterate-once/61472122#61472122
-    if split == 'train':
-        data = np.memmap(os.path.join("/root/data_dir", 'train.bin'), dtype=np.uint8, mode='r')
-    else:
-        data = np.memmap(os.path.join("/root/data_dir", 'val.bin'), dtype=np.uint8, mode='r')
-    # divide by block_size since we treat images as discrete samples
-    ix = torch.randint(len(data)//cfg.block_size - cfg.block_size, (cfg.batch_size,))
-    x = torch.stack([torch.from_numpy((data[i:i+cfg.block_size]).astype(np.int64)) for i in ix])
-    # TODO: instead of leaking next image we should repeat the preceding pixel
-    y = torch.stack([torch.from_numpy((data[i+1:i+1+cfg.block_size]).astype(np.int64)) for i in ix])
-    if device_type == 'cuda':
-        # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
-        x, y = x.pin_memory().to(cfg.device, non_blocking=True), y.pin_memory().to(cfg.device, non_blocking=True)
-    else:
-        x, y = x.to(cfg.device), y.to(cfg.device)
-    return x, y
-
 iter_num = 0
 best_val_loss = 1e9
 meta_vocab_size = 256
 
-model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size,
-                  bias=cfg.bias, vocab_size=None, dropout=cfg.dropout) # start with model_args from command line
+model_args = dict(
+    n_layer=cfg.n_layer,
+    n_head=cfg.n_head,
+    n_embd=cfg.n_embd,
+    block_size=cfg.block_size,
+    bias=cfg.bias,
+    vocab_size=None,
+    dropout=cfg.dropout,
+    rematerialization_steps=cfg.rematerialization_steps
+) # start with model_args from command line
 
 model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 256
 gptconf = GPTConfig(**model_args)
@@ -108,7 +98,7 @@ def estimate_loss():
     for split in ['train', 'val']:
         losses = torch.zeros(cfg.eval_iters)
         for k in range(cfg.eval_iters):
-            X, Y = get_batch(split)
+            X, Y = get_batch(split, cfg)
             with ctx:
                 logits, loss = model(X, Y)
             losses[k] = loss.item()
@@ -139,7 +129,7 @@ if cfg.wandb_log and master_process:
     wandb.log_artifact(artifact)
 
 # training loop
-X, Y = get_batch('train') # fetch the very first batch
+X, Y = get_batch('train', cfg) # fetch the very first batch
 t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
@@ -154,6 +144,10 @@ while True:
     if iter_num % cfg.eval_interval == 0 and master_process:
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        # generate images during eval
+        img_path = f"eval_{iter_num}.jpg"
+        # overfitting experiment => sample from train data
+        generate_samples(model, n=4, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
         if cfg.wandb_log:
             wandb.log({
                 "iter": iter_num,
@@ -161,6 +155,7 @@ while True:
                 "val/loss": losses['val'],
                 "lr": lr,
                 "mfu": running_mfu*100, # convert to percentage
+                "eval_images": wandb.Image(img_path)
             })
         if losses['val'] < best_val_loss or cfg.always_save_checkpoint:
             best_val_loss = losses['val']
@@ -191,7 +186,7 @@ while True:
             logits, loss = model(X, Y)
             loss = loss / cfg.gradient_accumulation_steps # scale the loss to account for gradient accumulation
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
-        X, Y = get_batch('train')
+        X, Y = get_batch('train', cfg)
         # backward pass, with gradient scaling if training in fp16
         scaler.scale(loss).backward()
     # clip the gradient
@@ -225,3 +220,10 @@ while True:
 
 if ddp:
     destroy_process_group()
+
+# Goal for today: 
+# Sampling during training & log samples on wandb
+# Overfit on train data on small model
+# implement correct positional encoding
+# remove data leakage from data loader
+
