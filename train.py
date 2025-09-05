@@ -14,20 +14,35 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from modules.vanilla import GPT, GPTConfig
 from utils import get_batch, generate_samples 
+
 from omegaconf import OmegaConf
 import yaml
 import json
 
-cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-overfit.yaml")
+cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-ddp.yaml")
 
 with open("config.json", "w") as f:
     json.dump(dict(cfg), f, indent=2)
 
 # system
 ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
+print(f"DDP: {ddp}")
+print(f"WORLD_SIZE:{int(os.environ['WORLD_SIZE'])}")
+print(f"GRAD_ACCUMULATION_STEPS:{cfg.gradient_accumulation_steps}")
 # TODO: implement distributed training
 if ddp:
-    pass
+    init_process_group(backend=cfg.backend)
+    ddp_rank = int(os.environ['RANK'])
+    ddp_local_rank = int(os.environ['LOCAL_RANK'])
+    ddp_world_size = int(os.environ['WORLD_SIZE'])
+    device = f'cuda:{ddp_local_rank}'
+    torch.cuda.set_device(device)
+    master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
+    seed_offset = ddp_rank # each process gets a different seed
+    # world_size number of processes will be training simultaneously, so we can scale
+    # down the desired gradient accumulation iterations per process proportionally
+    assert cfg.gradient_accumulation_steps % ddp_world_size == 0
+    cfg.gradient_accumulation_steps //= ddp_world_size
 else:
     # if not ddp, we are running on a single gpu, and one process
     master_process = True
@@ -147,7 +162,8 @@ while True:
         # generate images during eval
         img_path = f"eval_{iter_num}.jpg"
         # overfitting experiment => sample from train data
-        generate_samples(model, n=4, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
+        # raw_model for ddp
+        generate_samples(raw_model, n=4, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
         if cfg.wandb_log:
             wandb.log({
                 "iter": iter_num,

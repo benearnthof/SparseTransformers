@@ -16,26 +16,26 @@ https://docs.pytorch.org/docs/stable/checkpoint.html
 * With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
 * The number of activation checkpoints can be set in the model config.  
 * Automatic mixed precision
+* DDP Training via `torchrun --standalone --nproc_per_node=8 train.py config/cifar-10-ddp.yaml`
+* During evaluation masked images are sampled and logged on wandb with their respective predictions
+* To avoid data leakage from image to image the last target byte y[-1] is set to the last input byte x[-1]  
+* Adjusted positional encodings for image data, see below.
 
 #### TODO
 * Flame Graph profiling of model to visualize memory usage before and after gradient checkpointing & compare impact of hardware
 * Compare Vanilla to FlashAttention on different hardware  
-* DDP Training  
 * examine impact of batch size on training stability  
 * larger batch sizes may be beneficial for transformers  
 
 ### Functionality
-#### Features
-* During evaluation masked images are sampled and logged on wandb with their respective predictions
-* To avoid data leakage from image to image the last target byte y[-1] is set to the last input byte x[-1]
 #### TODO
-* Adjust the positional encoding for image data
 * Implement sparse kernels
 * Apply Dropout only at the end of each residual addition.
 * Use pre-activation residual block of https://arxiv.org/pdf/1603.05027
 * resume training from checkpoint
 * add other masking variants (data augmentation ?)
 * Layer-dependent weight initialization
+* Visualize positional encodings to clarify what's going on
 
 ### Visualization
 #### TODO
@@ -59,28 +59,43 @@ For images, we used data embeddings, where $d_{\text {data }}=3$ for the row, co
 
 Implementing this should look something like this: 
 ```python
-self.row_emb = nn.Embedding(32, config.n_embd)     # 32 rows
-self.col_emb = nn.Embedding(32, config.n_embd)     # 32 cols
-self.chan_emb = nn.Embedding(3, config.n_embd)     # RGB channels
+class GPT(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.transformer = nn.ModuleDict(dict(
+            wte = nn.Embedding(config.vocab_size, config.n_embd),
+            # positional encoding for CIFAR-10 images
+            row_emb = nn.Embedding(32, config.n_embd),  # 32 rows
+            col_emb = nn.Embedding(32, config.n_embd),  # 32 cols
+            chan_emb = nn.Embedding(3, config.n_embd),  # 3 channels (RGB)
+            drop = nn.Dropout(config.dropout),
+            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
+            ln_f = LayerNorm(config.n_embd, bias=config.bias),
+        ))
+        ...
 
-tok_emb = self.transformer.wte(idx)  # (B, T, n_embd)
+def forward(self, idx, targets=None):
+    device = idx.device
+    b, t = idx.size()
 
-# decode the flattened index (0..3071) into (row, col, channel)
-b, t = idx.shape
-rows = torch.arange(0, 32, device=idx.device).repeat_interleave(32*3)
-cols = torch.arange(0, 32, device=idx.device).repeat(32*3)
-chans = torch.arange(0, 3, device=idx.device).repeat(32*32)
+    tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
+    # positional embedding for CIFAR-10 Images
+    # decode flat indices (0..3071) into row, col, chan
+    H, W, C = 32, 32, 3
+    # we load CIFAR-10 images as 3072 bytes where the first 1024 correspond to the first 
+    # channel of the image, 32 bytes of which correspond to the first row.
+    positions = torch.arange(t, device=device)
+    chans = positions // (H * W)                 # 0..2
+    rows  = (positions % (H * W)) // W           # 0..31
+    cols  = positions % W              
+    row_emb = self.transformer.row_emb(rows)[None, :, :].expand(b, -1, -1)
+    col_emb = self.transformer.col_emb(cols)[None, :, :].expand(b, -1, -1)
+    chan_emb = self.transformer.chan_emb(chans)[None, :, :].expand(b, -1, -1)
 
-rows = rows[:t]
-cols = cols[:t]
-chans = chans[:t]
-
-row_emb = self.row_emb(rows)[None, :, :].expand(b, -1, -1)
-col_emb = self.col_emb(cols)[None, :, :].expand(b, -1, -1)
-chan_emb = self.chan_emb(chans)[None, :, :].expand(b, -1, -1)
-
-x = tok_emb + row_emb + col_emb + chan_emb
-x = self.transformer.drop(x)
+    x = self.transformer.drop(tok_emb + row_emb + col_emb + chan_emb)
+    ...
+    
 ```
 Where we can in turn remove the old weighted position embedding.
 

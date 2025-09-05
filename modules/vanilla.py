@@ -119,7 +119,11 @@ class GPT(nn.Module):
 
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
-            wpe = nn.Embedding(config.block_size, config.n_embd),
+            # wpe = nn.Embedding(config.block_size, config.n_embd),
+            # positional encoding for CIFAR-10 images
+            row_emb = nn.Embedding(32, config.n_embd),  # 32 rows
+            col_emb = nn.Embedding(32, config.n_embd),  # 32 cols
+            chan_emb = nn.Embedding(3, config.n_embd),  # 3 channels (RGB)
             drop = nn.Dropout(config.dropout),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
@@ -145,7 +149,10 @@ class GPT(nn.Module):
         """
         n_params = sum(p.numel() for p in self.parameters())
         if non_embedding:
-            n_params -= self.transformer.wpe.weight.numel()
+            # n_params -= self.transformer.wpe.weight.numel()
+            n_params -= self.transformer.row_emb.weight.numel()
+            n_params -= self.transformer.col_emb.weight.numel()
+            n_params -= self.transformer.chan_emb.weight.numel()
         return n_params
 
     def _init_weights(self, module):
@@ -160,12 +167,25 @@ class GPT(nn.Module):
         device = idx.device
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
-        pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
+        # pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
 
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
-        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
-        x = self.transformer.drop(tok_emb + pos_emb)
+        # pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
+        # positional embedding for CIFAR-10 Images
+        # decode flat indices (0..3071) into row, col, chan
+        H, W, C = 32, 32, 3
+        # we load CIFAR-10 images as 3072 bytes where the first 1024 correspond to the first 
+        # channel of the image, 32 bytes of which correspond to the first row.
+        positions = torch.arange(t, device=device)
+        chans = positions // (H * W)                 # 0..2
+        rows  = (positions % (H * W)) // W           # 0..31
+        cols  = positions % W              
+        row_emb = self.transformer.row_emb(rows)[None, :, :].expand(b, -1, -1)
+        col_emb = self.transformer.col_emb(cols)[None, :, :].expand(b, -1, -1)
+        chan_emb = self.transformer.chan_emb(chans)[None, :, :].expand(b, -1, -1)
+
+        x = self.transformer.drop(tok_emb + row_emb + col_emb + chan_emb)
         
         # basic checkpointing
         # we split the transformer into 8 number of blocks specified in config
