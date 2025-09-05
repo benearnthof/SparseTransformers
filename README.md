@@ -25,6 +25,8 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 
 ### Functionality
 #### TODO
+* Fix init of embeddings & parameters (Section 6 of the paper)
+* Feed-forward networks should project to 4d, unless we specify "half-size" then 2d
 * Implement sparse kernels
 * Apply Dropout only at the end of each residual addition.
 * Use pre-activation residual block of https://arxiv.org/pdf/1603.05027
