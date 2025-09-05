@@ -35,6 +35,7 @@ https://docs.pytorch.org/docs/stable/checkpoint.html
 * Use pre-activation residual block of https://arxiv.org/pdf/1603.05027
 * resume training from checkpoint
 * add other masking variants (data augmentation ?)
+* Layer-dependent weight initialization
 
 ### Visualization
 #### TODO
