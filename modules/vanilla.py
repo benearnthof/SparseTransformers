@@ -161,6 +161,7 @@ class GPT(nn.Module):
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
+            # TODO: Adjust std for CIFAR-10 embeddings
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, idx, targets=None):
@@ -185,6 +186,10 @@ class GPT(nn.Module):
         col_emb = self.transformer.col_emb(cols)[None, :, :].expand(b, -1, -1)
         chan_emb = self.transformer.chan_emb(chans)[None, :, :].expand(b, -1, -1)
 
+        # TODO: investigate if scaling helps ease training
+        # x = self.transformer.drop(tok_emb + (row_emb + col_emb + chan_emb) / 3)
+        # alternatively scale the variance of the embedding initialization accordingly
+        # we might need more warmup steps / longer training to see full improvement
         x = self.transformer.drop(tok_emb + row_emb + col_emb + chan_emb)
         
         # basic checkpointing
