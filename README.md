@@ -10,11 +10,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 ## Notes and todo list  
 ### Memory profiling & Performance
 #### Features
-https://pytorch.org/blog/activation-checkpointing-techniques/  
-https://docs.pytorch.org/docs/stable/checkpoint.html  
-* Dense Attention (flashattention) with full training config uses 80% of A100 memory at batch size 16 for CIFAR-10.  
-* With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
-* The number of activation checkpoints can be set in the model config.  
+* Activation Checkpointing to decrease GPU memory requirements for very deep transformers
 * Automatic mixed precision
 * DDP Training via `torchrun --standalone --nproc_per_node=8 train.py config/cifar-10-ddp.yaml`
 * During evaluation masked images are sampled and logged on wandb with their respective predictions
@@ -36,6 +32,7 @@ https://docs.pytorch.org/docs/stable/checkpoint.html
 * add other masking variants (data augmentation ?)
 * Layer-dependent weight initialization
 * Visualize positional encodings to clarify what's going on
+* Consider tweaks to enhance data efficiency https://arxiv.org/abs/2012.12877
 
 ### Visualization
 #### TODO
@@ -43,7 +40,9 @@ https://docs.pytorch.org/docs/stable/checkpoint.html
 * visualize attention matrices for checkpoint (maybe during training?) 
 
 ### Additional Resources
-https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial15/Vision_Transformer.html
+https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial15/Vision_Transformer.html  
+https://pytorch.org/blog/activation-checkpointing-techniques/  
+https://docs.pytorch.org/docs/stable/checkpoint.html  
 
 ### On positional Encoding
 In addition to the embedding of input symbols, positional embeddings are typically used in Transformers and other location-agnostic architectures to encode the spatial relationships of data (Gehring et al., 2017), (Parmar et al., 2018).
@@ -99,3 +98,8 @@ def forward(self, idx, targets=None):
 ```
 Where we can in turn remove the old weighted position embedding.
 
+## Training & GPU Considerations
+* Dense Attention (flashattention) with full training config uses 80% of A100 memory at batch size 16 for CIFAR-10.  
+* With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
+* The number of activation checkpoints can be set in the model config.
+* With DDP both nodes of RTX A6000 48GB and A40 48GB seem attractive, still need to benchmark optimal training configurations & compare wall clock time per epoch & implied total training cost.
