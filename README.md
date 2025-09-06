@@ -3,8 +3,8 @@ Reproducing the paper Generating Long Sequences with Sparse Transformers by Chil
 https://arxiv.org/abs/1904.10509
 
 Currently this implementation is a prototype, some adjustments need to be made to accommodate the original paper. 
-So far the trimmed down basic implementation can train on CIFAR-10. A 50m parameter dense attention transformer achieved the following results after ~4 epochs:  
-<img src="https://raw.githubusercontent.com/benearnthof/SparseTransformers/refs/heads/main/assets/eval_3000.jpg" alt="https://raw.githubusercontent.com/benearnthof/SparseTransformers/refs/heads/main/assets/eval_3000.jpg" width="400"/>  
+The baseline implementation can successfully overfit a subset of CIFAR-10 to zero loss:
+<img src="https://raw.githubusercontent.com/benearnthof/SparseTransformers/refs/heads/main/assets/overfit.jpg" alt="https://raw.githubusercontent.com/benearnthof/SparseTransformers/refs/heads/main/assets/overfit.jpg" width="400"/>  
 The paper trained for 120 epochs of 48k images each (5760000 samples total) so right now I'm satisfied with this very slimmed down prototype. 
 
 ## Notes and todo list  
