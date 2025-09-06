@@ -37,6 +37,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * Visualize positional encodings to clarify what's going on
 * Consider tweaks to enhance data efficiency https://arxiv.org/abs/2012.12877
 * Overfit on a fraction of the dataset to confirm the baseline works
+* Add 4th panel to evaluation showing pixelwise differences between target and prediction
 
 ### Visualization
 #### TODO
