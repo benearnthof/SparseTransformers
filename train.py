@@ -19,7 +19,7 @@ from omegaconf import OmegaConf
 import yaml
 import json
 
-cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-ddp.yaml")
+cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-overfit.yaml")
 
 with open("config.json", "w") as f:
     json.dump(dict(cfg), f, indent=2)

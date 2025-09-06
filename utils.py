@@ -9,7 +9,12 @@ def get_batch(split, cfg, device_type="cuda"):
         data = np.memmap(os.path.join("/root/data_dir", 'train.bin'), dtype=np.uint8, mode='r')
     else:
         data = np.memmap(os.path.join("/root/data_dir", 'val.bin'), dtype=np.uint8, mode='r')
-    ix = torch.randint(len(data)//cfg.block_size - cfg.block_size, (cfg.batch_size,))
+    
+    if not cfg.overfit:
+        # overfitting on one image to test the architecture
+        ix = torch.randint(len(data)//cfg.block_size - cfg.block_size, (cfg.batch_size,))
+    else:
+        ix = torch.zeros(cfg.batch_size, dtype=int)
     x_list, y_list = [], []
     for i in ix:
         # i = tensor(4634)
