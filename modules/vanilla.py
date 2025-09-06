@@ -129,10 +129,12 @@ class GPT(nn.Module):
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.transformer.wte.weight = self.lm_head.weight
+        # removed weight tying
+        # self.transformer.wte.weight = self.lm_head.weight
         # init all weights
         self.apply(self._init_weights)
         # Section 6: The weight matrix for the output logits was initialized to 0.
+        # The authors note that this, in combination with the smaller init requires more warmup steps
         torch.nn.init.zeros_(self.lm_head.weight)
         # apply special scaled init to the residual projections, per GPT-2 paper
         for pn, p in self.named_parameters():

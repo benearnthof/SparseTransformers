@@ -12,7 +12,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 #### Features
 * Activation Checkpointing to decrease GPU memory requirements for very deep transformers
 * Automatic mixed precision
-* DDP Training via `torchrun --standalone --nproc_per_node=8 train.py config/cifar-10-ddp.yaml`
+* DDP Training via `torchrun --standalone --nproc_per_node=2 train.py config/cifar-10-ddp.yaml`
 * During evaluation masked images are sampled and logged on wandb with their respective predictions
 * To avoid data leakage from image to image the last target byte y[-1] is set to the last input byte x[-1]  
 * Adjusted positional encodings for image data, see below.
@@ -36,6 +36,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * Layer-dependent weight initialization
 * Visualize positional encodings to clarify what's going on
 * Consider tweaks to enhance data efficiency https://arxiv.org/abs/2012.12877
+* Overfit on a fraction of the dataset to confirm the baseline works
 
 ### Visualization
 #### TODO
@@ -111,3 +112,4 @@ We initialize the token embedding $W_e$ from $\mathcal{N}\left(0, \frac{0.125}{\
 * With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
 * The number of activation checkpoints can be set in the model config.
 * With DDP both nodes of RTX A6000 48GB and A40 48GB seem attractive, still need to benchmark optimal training configurations & compare wall clock time per epoch & implied total training cost.
+* RTX A6000 48GB: Batch size 64, Grad Accumulation steps: 4, time per iter: 5800ms, ~0.16 hours per epoch
