@@ -132,6 +132,8 @@ class GPT(nn.Module):
         self.transformer.wte.weight = self.lm_head.weight
         # init all weights
         self.apply(self._init_weights)
+        # Section 6: The weight matrix for the output logits was initialized to 0.
+        torch.nn.init.zeros_(self.lm_head.weight)
         # apply special scaled init to the residual projections, per GPT-2 paper
         for pn, p in self.named_parameters():
             if pn.endswith('c_proj.weight'):
@@ -156,13 +158,23 @@ class GPT(nn.Module):
         return n_params
 
     def _init_weights(self, module):
+        # Updated initialization (Section 6 of the paper)
         if isinstance(module, nn.Linear):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.125 / math.sqrt(module.in_features))
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
+
         elif isinstance(module, nn.Embedding):
-            # TODO: Adjust std for CIFAR-10 embeddings
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            d = module.embedding_dim
+            # token embedding
+            if module is self.transformer.wte:
+                std = 0.125 / math.sqrt(d)
+            # positional embeddings (row/col/chan)
+            else:
+                n_emb = 3  # row, col, chan
+                std = 0.125 / math.sqrt(d * n_emb)
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
+
 
     def forward(self, idx, targets=None):
         device = idx.device
@@ -186,15 +198,10 @@ class GPT(nn.Module):
         col_emb = self.transformer.col_emb(cols)[None, :, :].expand(b, -1, -1)
         chan_emb = self.transformer.chan_emb(chans)[None, :, :].expand(b, -1, -1)
 
-        # TODO: investigate if scaling helps ease training
-        # x = self.transformer.drop(tok_emb + (row_emb + col_emb + chan_emb) / 3)
-        # alternatively scale the variance of the embedding initialization accordingly
-        # we might need more warmup steps / longer training to see full improvement
+        # initialization has been adjusted so summing should be fine
         x = self.transformer.drop(tok_emb + row_emb + col_emb + chan_emb)
         
-        # basic checkpointing
-        # we split the transformer into 8 number of blocks specified in config
-        # TODO: move parameter to config
+        # activation checkpointing as specified in config
         segments = self.config.rematerialization_steps
         x = checkpoint_sequential(self.transformer.h, segments, x, use_reentrant=False)
 

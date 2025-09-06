@@ -84,9 +84,9 @@ gptconf = GPTConfig(**model_args)
 
 print(gptconf)
 
-model = GPT(gptconf)
+model = GPT(gptconf).to(cfg.device)
 
-model.to(cfg.device)
+# model.to(cfg.device)
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(cfg.dtype == 'float16'))
@@ -96,14 +96,14 @@ optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg
 checkpoint = None # free up memory
 
 # compile the model
-if cfg.compile:
-    print("compiling the model... (takes a ~minute)")
-    unoptimized_model = model
-    model = torch.compile(model) # requires PyTorch 2.0
+# if cfg.compile:
+#     print("compiling the model... (takes a ~minute)")
+#     unoptimized_model = model
+#     model = torch.compile(model) # requires PyTorch 2.0
 
-# wrap model into DDP container
+# wrap model into DDP container & always compile
 if ddp:
-    model = DDP(model, device_ids=[ddp_local_rank])
+    model = DDP(torch.compile(model), device_ids=[ddp_local_rank])
 
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()

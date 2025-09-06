@@ -22,10 +22,11 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * Compare Vanilla to FlashAttention on different hardware  
 * examine impact of batch size on training stability  
 * larger batch sizes may be beneficial for transformers  
+* investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
 
 ### Functionality
+* Parameters & Embeddings are initialized like specified in Section 6 of the paper
 #### TODO
-* Fix init of embeddings & parameters (Section 6 of the paper)
 * Feed-forward networks should project to 4d, unless we specify "half-size" then 2d
 * Implement sparse kernels
 * Apply Dropout only at the end of each residual addition.
@@ -98,7 +99,12 @@ def forward(self, idx, targets=None):
     ...
     
 ```
-Where we can in turn remove the old weighted position embedding.
+Where we can in turn remove the old weighted position embedding.  
+
+### On Embeddnig Initialization
+All embeddings are of a constant dimension $d$, usually one of $\{256,512,1024\}$. By default, all linear transforms are to the same dimension, with the exception of the feed-forward network, which projects the input to $4 d$, unless we use "half-size" transformations, where it is $2 d$. Additionally, sometimes we halve the size of the query and key transformations.
+
+We initialize the token embedding $W_e$ from $\mathcal{N}\left(0, \frac{0.125}{\sqrt{d}}\right)$ and the position embeddings from $\mathcal{N}\left(0, \frac{0.125}{\sqrt{d n_{e m b}}}\right)$. Within the attention and feedforward components, all biases are initialized to 0 and all weights are initialized from $\mathcal{N}\left(0, \frac{0.125}{\sqrt{d_{i n}}}\right)$ where $d_{i n}$ is the fan-in dimension. The weight matrix for the output logits was initialized to 0.
 
 ## Training & GPU Considerations
 * Dense Attention (flashattention) with full training config uses 80% of A100 memory at batch size 16 for CIFAR-10.  
