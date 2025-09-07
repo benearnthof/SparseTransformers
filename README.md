@@ -39,7 +39,6 @@ for pn, p in self.named_parameters():
 #### TODO
 * resume training from checkpoint  
 * Visualize positional encodings to clarify what's going on  
-* Consider tweaks to enhance data efficiency https://arxiv.org/abs/2012.12877  
 * Try training with sparse pytorch implementation & torch.compile  
 * Implement blocksparse CUDA kernels  
 * add other masking variants (bidirectional training should only require adding a couple lines of code)  
