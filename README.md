@@ -46,7 +46,14 @@ for pn, p in self.named_parameters():
 * Learning rate scaling with batch size https://arxiv.org/pdf/1706.02677  
 * Stochastic Depth https://arxiv.org/pdf/1603.09382  
 * Weight init with truncated Gaussian https://arxiv.org/pdf/1803.01719  
-* Try the GPT-2 style architecture from https://proceedings.mlr.press/v119/chen20s/chen20s.pdf  
+* Try the GPT-2 style architecture from https://proceedings.mlr.press/v119/chen20s/chen20s.pdf
+* Memory efficient finetuning with LoRA/QLoRA
+* Data parallel finetuning  
+* Parameter sharding during finetuning (https://www.youtube.com/watch?v=xzBcBJ8_rzM) FSDP  
+* CPU offloading: Move optimizer state to CPU
+* FSDP2 x QLoRA in torchtune
+* AdamW8bit/4bit etc. api
+* Activation CPU offloading with streams (torchtune OffloadActivations context manager)  
 
 ### Visualization
 #### TODO
