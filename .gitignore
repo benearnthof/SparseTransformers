@@ -5,3 +5,6 @@ __pycache__/*
 *tar.gz
 cifar-10-batches-py/*
 wandb/*
+*.pickle
+*.jpg
+*.json

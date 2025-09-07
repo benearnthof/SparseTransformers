@@ -27,10 +27,9 @@ with open("config.json", "w") as f:
 
 # system
 ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
-print(f"DDP: {ddp}")
-print(f"WORLD_SIZE:{int(os.environ['WORLD_SIZE'])}")
-print(f"GRAD_ACCUMULATION_STEPS:{cfg.gradient_accumulation_steps}")
-# TODO: implement distributed training
+# print(f"DDP: {ddp}")
+# print(f"WORLD_SIZE:{int(os.environ['WORLD_SIZE'])}")
+# print(f"GRAD_ACCUMULATION_STEPS:{cfg.gradient_accumulation_steps}")
 if ddp:
     init_process_group(backend=cfg.backend)
     ddp_rank = int(os.environ['RANK'])
@@ -90,20 +89,12 @@ print(gptconf)
 
 model = GPT(gptconf).to(cfg.device)
 
-# model.to(cfg.device)
-
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(cfg.dtype == 'float16'))
 
 # optimizer
 optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
 checkpoint = None # free up memory
-
-# compile the model
-# if cfg.compile:
-#     print("compiling the model... (takes a ~minute)")
-#     unoptimized_model = model
-#     model = torch.compile(model) # requires PyTorch 2.0
 
 # wrap model into DDP container & always compile
 if ddp:
@@ -153,6 +144,32 @@ t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
 running_mfu = -1.0
+
+# for troubleshooting memory usage to optimize batchsize etc.
+if cfg.debug_memory:
+    torch.cuda.memory._record_memory_history(max_entries=100000)
+    for _ in range(5):
+        with ctx:
+            logits, loss = raw_model(X, Y)
+            loss = loss / cfg.gradient_accumulation_steps
+        scaler.scale(loss).backward()
+        if cfg.grad_clip != 0.0:
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
+        # step the optimizer and scaler if training in fp16
+        scaler.step(optimizer)
+        scaler.update()
+        # flush the gradients as soon as we can, no need for this memory anymore
+        optimizer.zero_grad(set_to_none=True)
+    try:
+        torch.cuda.memory._dump_snapshot(
+            f"layers_{cfg.n_layer}_remat_{cfg.rematerialization_steps}_batchsize_{cfg.batch_size}.pickle"
+            )
+    except Exception as e:
+        print(f"Failed to capture memory snapshot {e}")
+    # Stop recording memory snapshot history.
+    torch.cuda.memory._record_memory_history(enabled=None)
+
 while True:
     # determine and set the learning rate for this iteration
     lr = get_lr(iter_num) if cfg.decay_lr else cfg.learning_rate
