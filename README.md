@@ -16,13 +16,13 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * During evaluation masked images are sampled and logged on wandb with their respective predictions
 * To avoid data leakage from image to image the last target byte y[-1] is set to the last input byte x[-1]  
 * Adjusted positional encodings for image data, see below.
+* GPU memory profiling can be enabled with `debug_memory` in config.
+* To visualize the .pickle files this produces head over to [https://docs.pytorch.org/memory_viz](https://docs.pytorch.org/memory_viz)
 
 #### TODO
-* Flame Graph profiling of model to visualize memory usage before and after gradient checkpointing & compare impact of hardware
 * Compare Vanilla to FlashAttention on different hardware  
-* examine impact of batch size on training stability  
-* larger batch sizes may be beneficial for transformers  
-* investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
+* Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
+* Investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
 
 ### Functionality
 * Parameters & Embeddings are initialized like specified in section 6 of the paper
@@ -37,11 +37,17 @@ for pn, p in self.named_parameters():
 ```
 
 #### TODO
-* Implement sparse kernels
-* resume training from checkpoint
-* add other masking variants (data augmentation ?)
-* Visualize positional encodings to clarify what's going on
-* Consider tweaks to enhance data efficiency https://arxiv.org/abs/2012.12877
+* resume training from checkpoint  
+* Visualize positional encodings to clarify what's going on  
+* Consider tweaks to enhance data efficiency https://arxiv.org/abs/2012.12877  
+* Try training with sparse pytorch implementation & torch.compile  
+* Implement blocksparse CUDA kernels  
+* add other masking variants (bidirectional training should only require adding a couple lines of code)  
+* Data augmentation à la https://arxiv.org/abs/1909.13719  
+* Learning rate scaling with batch size https://arxiv.org/pdf/1706.02677  
+* Stochastic Depth https://arxiv.org/pdf/1603.09382  
+* Weight init with truncated Gaussian https://arxiv.org/pdf/1803.01719  
+* Try the GPT-2 style architecture from https://proceedings.mlr.press/v119/chen20s/chen20s.pdf  
 
 ### Visualization
 #### TODO
