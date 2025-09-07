@@ -61,10 +61,10 @@ We found using learned embeddings which either encoded the structure of the data
 
 We added either $n_{e m b}=d_{d a t a}$ or $n_{e m b}=d_{a t t n}$ embeddings to each input location, where $d_{\text {data }}$ refers to the number of dimensions of the data, and $d_{a t t n}$ is the number of dimensions of the factorized attention. If $\mathbf{x}_i$ is the one-hot encoded $i$ th element in the sequence, and $\mathbf{o}_i^{(j)}$ represents the one-hot encoded position of 
 ```math
-$\mathrm{x}_i$ in the $j$ th dimension $\left(1 \leq j \leq n_{e m b}\right)$, then:$
+\mathrm{x}_i in the j th dimension \left(1 \leq j \leq n_{e m b}\right), then:
 ```
 ```math
-\operatorname{embed}\left(X, W_e\right)=\left(\mathbf{x}_i W_e+\sum_{j=1}^{n_{e m b}} \mathbf{o}_i^{(j)} W_j\right)_{\mathbf{x}_i \in X}
+embed\left(X, W_e\right)=\left(\mathbf{x}_i W_e+\sum_{j=1}^{n_{e m b}} \mathbf{o}_i^{(j)} W_j\right)_{\mathbf{x}_i \in X}
 ```
 
 For images, we used data embeddings, where $d_{\text {data }}=3$ for the row, column, and channel location of each input byte. For text and audio, we used two-dimensional attention embeddings, where $d_{\text {attn }}=2$ and the index corresponds to each position's row and column index in a matrix of width equal to the stride.
