@@ -20,7 +20,7 @@ import yaml
 import json
 
 # TODO: pass this as commandline argument
-cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-overfit.yaml")
+cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-overfit-128.yaml")
 
 with open("config.json", "w") as f:
     json.dump(dict(cfg), f, indent=2)
@@ -148,7 +148,7 @@ running_mfu = -1.0
 # for troubleshooting memory usage to optimize batchsize etc.
 if cfg.debug_memory:
     torch.cuda.memory._record_memory_history(max_entries=100000)
-    for _ in range(5):
+    for _ in range(2):
         with ctx:
             logits, loss = raw_model(X, Y)
             loss = loss / cfg.gradient_accumulation_steps

@@ -116,8 +116,25 @@ We initialize the token embedding $W_e$ from $\mathcal{N}\left(0, \frac{0.125}{\
 ## Training & GPU Considerations
 ### Overfitting the Baseline
 * cifar-10-overfit.yaml produces a 7,488,256 parameter model, using about 7GB of GPU HBM.
-* Dense Attention (flashattention) with full training config uses 80% of A100 memory at batch size 16 for CIFAR-10.  
-* With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
+* Dense Attention (flashattention) with full training config uses ~58GB on a A100 80GB at batch size 16 for CIFAR-10.
+* For activation checkpointing at batch size 16 peak memory usage is as follows:
+| Remat Steps | Peak HBM |
+|-------------|----------|
+| 1           | 58 GB    |
+| 2           | 33 GB    |
+| 4           | 19 GB    |
+| 8           | 13 GB    |
+* Activation checkpointing achieves the following throughput
+| Remat Steps | Max Batchsize | Peak HBM | Time/Batch | Time/Epoch |
+|-------------|------------|----------|------------|------------|
+| 1           | 16         | 58GB     | 910ms      | 0.79h      |
+| 2           | 32         | 59GB     | 1850ms     | 0.80h      |
+| 4           | 64         | 60GB     | 3780ms     | 0.82h      |
+| 8           | 128        | 63GB     | 7780ms     | 0.84h      |
+
+* The optimizer state seems to take up around 5 GB. 
+
+* This brings the total training time (without early stopping) on an 8xA100 80GB node to about 18 hours and 45 minutes, which, as of September 2025, yields a cost of around $250 depending on the cloud GPU provider.  
 * The number of activation checkpoints can be set in the model config.
-* With DDP both nodes of RTX A6000 48GB and A40 48GB seem attractive, still need to benchmark optimal training configurations & compare wall clock time per epoch & implied total training cost.
-* RTX A6000 48GB: Batch size 64, Grad Accumulation steps: 4, time per iter: 5800ms, ~0.16 hours per epoch
+* I will do some more benchmarks to look at the performance per dollar of various other GPUs, low-demand options like the RTX A6000 48GB could be a sensible middle ground.  
+

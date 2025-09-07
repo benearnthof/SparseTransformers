@@ -1,20 +1,20 @@
 # hyperparameters
 # I/O
-# very overkill config for a 100M parameter baseline. 
-debug_memory: True
+# very overkill config for a 59M parameter baseline. 
+debug_memory: False
 out_dir: out
 eval_interval: 500
 log_interval: 10
-eval_iters: 50
+eval_iters: 10
 eval_imgs: 1 # number of images generated during eval
 eval_only: False # if True, script exits right after the first eval
-always_save_checkpoint: False # if True, always save a checkpoint after each eval
+always_save_checkpoint: True # if True, always save a checkpoint after each eval
 init_from: 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 
 # wandb logging
 wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
-wandb_run_name: 'cifar-10-half-size' # 'run' + str(time.time())
+wandb_run_name: 'cifar-10-128-overfit' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
@@ -37,7 +37,7 @@ qk_dim: 128 # half-size projection for queries and keys as per section 7
 attn_dropout: 0 # we do not apply dropout within the attention blocks [...] and instead
 resid_dropout: 0.05 # only apply it at the end of each residual addition
 bias: False # do we use bias inside LayerNorm and Linear layers?
-rematerialization_steps: 1
+rematerialization_steps: 1 # number of activation checkpointing steps
 
 # adamw optimizer
 learning_rate: 0.00035 # max learning rate
