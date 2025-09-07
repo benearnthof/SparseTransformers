@@ -114,7 +114,8 @@ All embeddings are of a constant dimension $d$, usually one of $\{256,512,1024\}
 We initialize the token embedding $W_e$ from $\mathcal{N}\left(0, \frac{0.125}{\sqrt{d}}\right)$ and the position embeddings from $\mathcal{N}\left(0, \frac{0.125}{\sqrt{d n_{e m b}}}\right)$. Within the attention and feedforward components, all biases are initialized to 0 and all weights are initialized from $\mathcal{N}\left(0, \frac{0.125}{\sqrt{d_{i n}}}\right)$ where $d_{i n}$ is the fan-in dimension. The weight matrix for the output logits was initialized to 0.
 
 ## Training & GPU Considerations
-* These data points are outdated, I'll provide updated benchmarks in the next couple of days
+### Overfitting the Baseline
+* cifar-10-overfit.yaml produces a 7,488,256 parameter model, using about 7GB of GPU HBM.
 * Dense Attention (flashattention) with full training config uses 80% of A100 memory at batch size 16 for CIFAR-10.  
 * With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
 * The number of activation checkpoints can be set in the model config.

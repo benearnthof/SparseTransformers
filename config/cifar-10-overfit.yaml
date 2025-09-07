@@ -29,7 +29,10 @@ block_size: 3072
 n_layer: 16
 n_head: 2
 n_embd: 256
+# mlp_dim is multiplier: 2 => mlp_dimension = 2 * n_embed
 mlp_dim: 2 # half-size projection as per section 7 of the paper
+# kq_dim is the explicit dimension of query and key linear projections
+qk_dim: 128 # half-size projection for queries and keys as per section 7
 attn_dropout: 0 # we do not apply dropout within the attention blocks [...] and instead
 resid_dropout: 0.1 # only apply it at the end of each residual addition
 bias: False # do we use bias inside LayerNorm and Linear layers?

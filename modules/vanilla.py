@@ -25,8 +25,12 @@ class CausalSelfAttention(nn.Module):
   def __init__(self, config):
     super().__init__()
     assert config.n_embd % config.n_head == 0
+    # assert config.qk_dim % config.n_head == 0
     # key, query, value projections for all heads, but in a batch
-    self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
+    # self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
+    self.c_q = nn.Linear(config.n_embd, config.qk_dim, bias=config.bias)
+    self.c_k = nn.Linear(config.n_embd, config.qk_dim, bias=config.bias)
+    self.c_v = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
     # output projection
     self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
     # regularization
@@ -34,6 +38,7 @@ class CausalSelfAttention(nn.Module):
     self.resid_dropout = nn.Dropout(config.resid_dropout)
     self.n_head = config.n_head
     self.n_embd = config.n_embd
+    self.qk_dim = config.qk_dim
     self.dropout = config.attn_dropout
     # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
     self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
@@ -46,9 +51,12 @@ class CausalSelfAttention(nn.Module):
     B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
     # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-    q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)
-    k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-    q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+    # q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)
+    q = self.c_q(x)  # (B, T, qk_dim)
+    k = self.c_k(x)  # (B, T, qk_dim)
+    v = self.c_v(x)  # (B, T, n_embd)
+    k = k.view(B, T, self.n_head, self.qk_dim // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+    q = q.view(B, T, self.n_head, self.qk_dim // self.n_head).transpose(1, 2) # (B, nh, T, hs)
     v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
     # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
@@ -106,6 +114,7 @@ class GPTConfig:
     n_head: int = 2
     n_embd: int = 256
     mlp_dim: int = 2
+    qk_dim: int = 128
     attn_dropout: float = 0.1
     resid_dropout: float = 0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster

@@ -19,6 +19,7 @@ from omegaconf import OmegaConf
 import yaml
 import json
 
+# TODO: pass this as commandline argument
 cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-overfit.yaml")
 
 with open("config.json", "w") as f:
@@ -73,6 +74,7 @@ model_args = dict(
     n_head=cfg.n_head,
     n_embd=cfg.n_embd,
     mlp_dim=cfg.mlp_dim,
+    qk_dim=cfg.qk_dim,
     block_size=cfg.block_size,
     bias=cfg.bias,
     vocab_size=None,

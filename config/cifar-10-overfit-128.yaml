@@ -2,9 +2,10 @@
 # I/O
 # very overkill config for a 100M parameter baseline. 
 out_dir: out
-eval_interval: 100
+eval_interval: 500
 log_interval: 10
-eval_iters: 200
+eval_iters: 50
+eval_imgs: 1 # number of images generated during eval
 eval_only: False # if True, script exits right after the first eval
 always_save_checkpoint: False # if True, always save a checkpoint after each eval
 init_from: 'scratch' # 'scratch' or 'resume' or 'gpt2*'
@@ -12,12 +13,13 @@ init_from: 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 # wandb logging
 wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
-wandb_run_name: 'cifar-10' # 'run' + str(time.time())
+wandb_run_name: 'cifar-10-half-size' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
+overfit: True
 gradient_accumulation_steps: 1 # used to simulate larger batch sizes
-batch_size: 64 # if gradient_accumulation_steps > 1, this is the micro-batch size
+batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
 # 6 seconds per batch for 24 batch size and 30 gradient accumulation steps
 # 300 ms for 48 batch size and 1 gradient accumulation step
 block_size: 3072
@@ -27,14 +29,19 @@ block_size: 3072
 n_layer: 128
 n_head: 2
 n_embd: 256
+# mlp_dim is multiplier: 2 => mlp_dimension = 2 * n_embed
+mlp_dim: 2 # half-size projection as per section 7 of the paper
+# kq_dim is the explicit dimension of query and key linear projections
+qk_dim: 128 # half-size projection for queries and keys as per section 7
 attn_dropout: 0 # we do not apply dropout within the attention blocks [...] and instead
-resid_dropout: 0.1 # only apply it at the end of each residual addition
+resid_dropout: 0.05 # only apply it at the end of each residual addition
 bias: False # do we use bias inside LayerNorm and Linear layers?
+rematerialization_steps: 1
 
 # adamw optimizer
-learning_rate: 0.0004 # max learning rate
+learning_rate: 0.00035 # max learning rate
 # 120 epochs of 50k images: 6 million iterations / batch size: 500k iters
-max_iters: 500000 # total number of training iterations
+max_iters: 5000 # total number of training iterations
 weight_decay: 0.01
 beta1: 0.9
 beta2: 0.95
@@ -42,8 +49,8 @@ beta2: 0.95
 grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
 # learning rate decay settings
 decay_lr: True # whether to decay the learning rate
-warmup_iters: 5000 # how many steps to warm up for
-lr_decay_iters: 500000 # should be ~= max_iters per Chinchilla
+warmup_iters: 0 # how many steps to warm up for
+lr_decay_iters: 5000 # should be ~= max_iters per Chinchilla
 min_lr: 0.000035 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
 # DDP settings
 backend: nccl # 'nccl', 'gloo', etc.
