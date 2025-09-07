@@ -3,7 +3,7 @@ Reproducing the paper Generating Long Sequences with Sparse Transformers by Chil
 https://arxiv.org/abs/1904.10509
 
 Currently this implementation is a prototype, some adjustments need to be made to accommodate the original paper. 
-The baseline implementation can successfully overfit a subset of CIFAR-10 to zero loss:
+The 128 layer, 2 head dense attention baseline can successfully overfit on a subset of CIFAR-10 to zero loss:
 <img src="https://github.com/benearnthof/SparseTransformers/blob/main/assets/overfit_cifar.gif" alt="https://github.com/benearnthof/SparseTransformers/blob/main/assets/overfit_cifar.gif" width="600"/>  
 The paper trained for 120 epochs of 48k images each (5760000 samples total) so right now I'm satisfied with this very slimmed down prototype. 
 
