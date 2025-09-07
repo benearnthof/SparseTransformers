@@ -59,7 +59,7 @@ In addition to the embedding of input symbols, positional embeddings are typical
 
 We found using learned embeddings which either encoded the structure of the data or the factorized attention patterns were important for performance of our models.
 
-We added either $n_{e m b}=d_{d a t a}$ or $n_{e m b}=d_{a t t n}$ embeddings to each input location, where $d_{\text {data }}$ refers to the number of dimensions of the data, and $d_{a t t n}$ is the number of dimensions of the factorized attention. If $\mathbf{x}_i$ is the one-hot encoded $i$ th element in the sequence, and $\mathbf{o}_i^{(j)}$ represents the one-hot encoded position of 
+We added either $n_{e m b}=d_{d a t a}$ or $n_{e m b}=d_{a t t n}$ embeddings to each input location, where $d_{\text {data }}$ refers to the number of dimensions of the data, and $d_{a t t n}$ is the number of dimensions of the factorized attention. If $\mathbf{x}_i$ is the one-hot encoded $i$ th element in the sequence, and $\mathbf{o}_i^{(j)}$ represents the one-hot encoded position of $x_i$ in the $j$-th dimension $\left(1 \leq j \leq n_{e m b}\right)$, then:
 ```math
 \mathrm{x}_i in the j th dimension \left(1 \leq j \leq n_{e m b}\right), then:
 ```
