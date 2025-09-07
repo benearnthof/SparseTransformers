@@ -30,11 +30,11 @@ class CausalSelfAttention(nn.Module):
     # output projection
     self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
     # regularization
-    self.attn_dropout = nn.Dropout(config.dropout)
-    self.resid_dropout = nn.Dropout(config.dropout)
+    self.attn_dropout = nn.Dropout(config.attn_dropout)
+    self.resid_dropout = nn.Dropout(config.resid_dropout)
     self.n_head = config.n_head
     self.n_embd = config.n_embd
-    self.dropout = config.dropout
+    self.dropout = config.attn_dropout
     # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
     self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
     # causal mask to ensure that attention is only applied to the left in the input sequence
@@ -72,10 +72,10 @@ class MLP(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
+        self.c_fc    = nn.Linear(config.n_embd, config.mlp_dim * config.n_embd, bias=config.bias)
         self.gelu    = nn.GELU()
-        self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
-        self.dropout = nn.Dropout(config.dropout)
+        self.c_proj  = nn.Linear(config.mlp_dim * config.n_embd, config.n_embd, bias=config.bias)
+        self.dropout = nn.Dropout(config.resid_dropout)
 
     def forward(self, x):
         x = self.c_fc(x)
@@ -105,7 +105,9 @@ class GPTConfig:
     n_layer: int = 128
     n_head: int = 2
     n_embd: int = 256
-    dropout: float = 0.25
+    mlp_dim: int = 2
+    attn_dropout: float = 0.1
+    resid_dropout: float = 0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
     rematerialization_steps: int = 8 # activation checkpointing to reduce GPU memory requirements of very deep nets
 
@@ -124,7 +126,7 @@ class GPT(nn.Module):
             row_emb = nn.Embedding(32, config.n_embd),  # 32 rows
             col_emb = nn.Embedding(32, config.n_embd),  # 32 cols
             chan_emb = nn.Embedding(3, config.n_embd),  # 3 channels (RGB)
-            drop = nn.Dropout(config.dropout),
+            drop = nn.Dropout(config.attn_dropout), # the paper does not specify if this is kept or removed, we keep it
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))

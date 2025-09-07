@@ -29,7 +29,8 @@ block_size: 3072
 n_layer: 64
 n_head: 2
 n_embd: 256
-dropout: 0 # for pretraining 0 is good, for finetuning try 0.1+
+attn_dropout: 0 # we do not apply dropout within the attention blocks [...] and instead
+resid_dropout: 0.1 # only apply it at the end of each residual addition
 bias: False # do we use bias inside LayerNorm and Linear layers?
 rematerialization_steps: 4
 

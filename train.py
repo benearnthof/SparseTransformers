@@ -72,10 +72,12 @@ model_args = dict(
     n_layer=cfg.n_layer,
     n_head=cfg.n_head,
     n_embd=cfg.n_embd,
+    mlp_dim=cfg.mlp_dim,
     block_size=cfg.block_size,
     bias=cfg.bias,
     vocab_size=None,
-    dropout=cfg.dropout,
+    attn_dropout=cfg.attn_dropout,
+    resid_dropout=cfg.resid_dropout,
     rematerialization_steps=cfg.rematerialization_steps
 ) # start with model_args from command line
 
@@ -163,7 +165,7 @@ while True:
         img_path = f"eval_{iter_num}.jpg"
         # overfitting experiment => sample from train data
         # raw_model for ddp
-        generate_samples(raw_model, n=4, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
+        generate_samples(raw_model, n=cfg.eval_imgs, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
         if cfg.wandb_log:
             wandb.log({
                 "iter": iter_num,

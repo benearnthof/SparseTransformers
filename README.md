@@ -25,24 +25,29 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
 
 ### Functionality
-* Parameters & Embeddings are initialized like specified in Section 6 of the paper
+* Parameters & Embeddings are initialized like specified in section 6 of the paper
+* Dropout is only applied at the end of each residual addition as per section 5.4 of the paper  
+* Pre-activation residual block of https://arxiv.org/pdf/1603.05027  
+* Feed-forward networks project to mlp_dim * d, with mlp_dim 4 as standard, mlp_dim 2 for "half-size" as outlined in section 7.1 for CIFAR-10  
+* Layer-dependent weight initialization
+```python
+for pn, p in self.named_parameters():
+    if pn.endswith('c_proj.weight'):
+        torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
+```
+
 #### TODO
-* Feed-forward networks should project to 4d, unless we specify "half-size" then 2d
 * Implement sparse kernels
-* Apply Dropout only at the end of each residual addition.
-* Use pre-activation residual block of https://arxiv.org/pdf/1603.05027
 * resume training from checkpoint
 * add other masking variants (data augmentation ?)
-* Layer-dependent weight initialization
 * Visualize positional encodings to clarify what's going on
 * Consider tweaks to enhance data efficiency https://arxiv.org/abs/2012.12877
-* Overfit on a fraction of the dataset to confirm the baseline works
-* Add 4th panel to evaluation showing pixelwise differences between target and prediction
 
 ### Visualization
 #### TODO
 * attention visualization for masked images
 * visualize attention matrices for checkpoint (maybe during training?) 
+* visualize categorial output distribution during training 
 
 ### Additional Resources
 https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial15/Vision_Transformer.html  
@@ -109,6 +114,7 @@ All embeddings are of a constant dimension $d$, usually one of $\{256,512,1024\}
 We initialize the token embedding $W_e$ from $\mathcal{N}\left(0, \frac{0.125}{\sqrt{d}}\right)$ and the position embeddings from $\mathcal{N}\left(0, \frac{0.125}{\sqrt{d n_{e m b}}}\right)$. Within the attention and feedforward components, all biases are initialized to 0 and all weights are initialized from $\mathcal{N}\left(0, \frac{0.125}{\sqrt{d_{i n}}}\right)$ where $d_{i n}$ is the fan-in dimension. The weight matrix for the output logits was initialized to 0.
 
 ## Training & GPU Considerations
+* These data points are outdated, I'll provide updated benchmarks in the next couple of days
 * Dense Attention (flashattention) with full training config uses 80% of A100 memory at batch size 16 for CIFAR-10.  
 * With 8 checkpointing splits memory usage is at 18% (!) for batch size 16. Batch size 64 uses 50GB memory but wall time per epoch is the same for 32 and 64. (around 50 minutes).
 * The number of activation checkpoints can be set in the model config.

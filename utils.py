@@ -101,7 +101,6 @@ def generate_samples(model, cfg, n=4, temperature=1.0, top_k=None, save_path=Non
             # Predict the masked first color channel
             cur = model.generate(cur.unsqueeze(0), max_new_tokens=half_pixels,
                                  temperature=temperature, top_k=top_k)[0]  # now 1024
-            # TODO: to assemble row by row for single channels we need to vstack two arrays, see utils.py
             # Predict the masked entries in the second channel
             cur = torch.cat([cur, X[i, 1024:1024+half_pixels]], dim=0)      # now 1536
             cur = model.generate(cur.unsqueeze(0), max_new_tokens=half_pixels,
@@ -116,18 +115,27 @@ def generate_samples(model, cfg, n=4, temperature=1.0, top_k=None, save_path=Non
 
         preds = torch.stack(preds).to(device)  # (n, 3072)
         # TODO: swap with to_img from utils
-        def to_img(t1d):
-            arr = t1d.detach().cpu().numpy().astype(np.uint8)
-            img = arr.reshape(3, 32, 32).transpose(1, 2, 0)  # HWC
-            return img
+        # def to_img(t1d):
+        #     arr = t1d.detach().cpu().numpy().astype(np.uint8)
+        #     img = arr.reshape(3, 32, 32).transpose(1, 2, 0)  # HWC
+        #     return img
 
-        fig, axes = plt.subplots(n, 3, figsize=(9, 3*n))
+        fig, axes = plt.subplots(n, 4, figsize=(12, 4*n))
         if n == 1:
-            axes = np.array([axes])  # normalize shape to [1,3]
+            axes = np.array([axes])  # normalize shape to [1,4]
         for i in range(n):
+            # axes[i, 0].imshow(to_img(X_masked[i])); axes[i, 0].set_title("Input (masked)"); axes[i, 0].axis("off")
+            # axes[i, 1].imshow(to_img(preds[i]));    axes[i, 1].set_title("Prediction");     axes[i, 1].axis("off")
+            # axes[i, 2].imshow(to_img(X[i]));        axes[i, 2].set_title("Target");         axes[i, 2].axis("off")
+            pred_img = to_img(preds[i])
+            target_img = to_img(X[i])
+            diff_img = np.abs(pred_img.astype(np.int16) - target_img.astype(np.int16)).astype(np.uint8)
+
             axes[i, 0].imshow(to_img(X_masked[i])); axes[i, 0].set_title("Input (masked)"); axes[i, 0].axis("off")
-            axes[i, 1].imshow(to_img(preds[i]));    axes[i, 1].set_title("Prediction");     axes[i, 1].axis("off")
-            axes[i, 2].imshow(to_img(X[i]));        axes[i, 2].set_title("Target");         axes[i, 2].axis("off")
+            axes[i, 1].imshow(pred_img);            axes[i, 1].set_title("Prediction");     axes[i, 1].axis("off")
+            axes[i, 2].imshow(target_img);          axes[i, 2].set_title("Target");         axes[i, 2].axis("off")
+            axes[i, 3].imshow(diff_img); axes[i, 3].set_title("Diff (abs)");   axes[i, 3].axis("off")
+
 
         plt.tight_layout()
         if save_path:
