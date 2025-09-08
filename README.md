@@ -23,6 +23,8 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
 * Investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
+* Mixed precision training with torch.distributed.fsdp MixedPrecisionPolicy (Section 5.6 in paper, should help scale training across multiple nodes)
+* torch.amp.GradScaler("cuda", args...) for gradient scaling with mixed precision to prevent underflow for small values
 
 ### Functionality
 * Parameters & Embeddings are initialized like specified in section 6 of the paper
