@@ -54,7 +54,7 @@ for pn, p in self.named_parameters():
 * Parameter sharding during finetuning (https://www.youtube.com/watch?v=xzBcBJ8_rzM) FSDP  
 * CPU offloading: Move optimizer state to CPU
 * FSDP2 x QLoRA in torchtune
-* AdamW8bit/4bit etc. api
+* AdamW8bit/4bit etc. api https://openreview.net/pdf?id=nN8TnHB5nw
 * Activation CPU offloading with streams (torchtune OffloadActivations context manager)  
 
 ### Visualization
