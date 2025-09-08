@@ -68,6 +68,7 @@ https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial15/
 https://pytorch.org/blog/activation-checkpointing-techniques/  
 https://docs.pytorch.org/docs/stable/checkpoint.html  
 https://docs.pytorch.org/tutorials/intermediate/FSDP_tutorial.html  
+https://docs.pytorch.org/torchtune/0.6/tutorials/memory_optimizations.html  
 
 ### On positional Encoding
 In addition to the embedding of input symbols, positional embeddings are typically used in Transformers and other location-agnostic architectures to encode the spatial relationships of data (Gehring et al., 2017), (Parmar et al., 2018).
