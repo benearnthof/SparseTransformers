@@ -20,6 +20,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * To visualize the .pickle files this produces head over to [https://docs.pytorch.org/memory_viz](https://docs.pytorch.org/memory_viz)
 
 #### TODO
+* Selective Activation Checkpointing: [As implemented here](https://github.com/Dao-AILab/flash-attention/blob/dfb664994c1e5056961c90d5e4f70bf7acc8af10/flash_attn/modules/mha.py#L655) We only want to checkpoint expensive feedforward computations.
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
 * Investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
