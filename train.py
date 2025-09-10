@@ -20,7 +20,7 @@ import yaml
 import json
 
 # TODO: pass this as commandline argument
-cfg = OmegaConf.load(r"/root/SparseTransformers/config/selective-checkpointing.yaml")
+cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-overfit-128.yaml")
 
 with open("config.json", "w") as f:
     json.dump(dict(cfg), f, indent=2)
@@ -79,7 +79,8 @@ model_args = dict(
     vocab_size=None,
     attn_dropout=cfg.attn_dropout,
     resid_dropout=cfg.resid_dropout,
-    rematerialization_steps=cfg.rematerialization_steps
+    rematerialization_steps=cfg.rematerialization_steps,
+    use_selective_checkpointing=cfg.use_selective_checkpointing
 ) # start with model_args from command line
 
 model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 256

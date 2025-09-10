@@ -1,7 +1,7 @@
 # hyperparameters
 # I/O
 # very overkill config for a 59M parameter baseline. 
-debug_memory: False
+debug_memory: True
 out_dir: out
 eval_interval: 500
 log_interval: 10
@@ -14,7 +14,7 @@ init_from: 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 # wandb logging
 wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
-wandb_run_name: 'cifar-10-128-overfit' # 'run' + str(time.time())
+wandb_run_name: '128-selective' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
@@ -43,7 +43,7 @@ use_selective_checkpointing: True
 # adamw optimizer
 learning_rate: 0.00035 # max learning rate
 # 120 epochs of 50k images: 6 million iterations / batch size: 500k iters
-max_iters: 5000 # total number of training iterations
+max_iters: 100 # total number of training iterations
 weight_decay: 0.01
 beta1: 0.9
 beta2: 0.95

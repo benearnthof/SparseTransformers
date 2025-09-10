@@ -111,7 +111,7 @@ class Block(nn.Module):
 
     def forward(self, x):
         # Use checkpoint for attention, keep MLP in memory
-        if self.training and self.config.use_selective_checkpointing:
+        if self.config.use_selective_checkpointing:
             # Checkpoint the attention computation
             attn_output = torch.utils.checkpoint.checkpoint(
                 self.forward_attention, 
@@ -235,6 +235,7 @@ class GPT(nn.Module):
         # initialization has been adjusted so summing should be fine
         x = self.transformer.drop(tok_emb + row_emb + col_emb + chan_emb)
         
+        # TODO: option is still in config, wrap this up to make it available again
         # activation checkpointing as specified in config
         # segments = self.config.rematerialization_steps
         # x = checkpoint_sequential(self.transformer.h, segments, x, use_reentrant=False)
