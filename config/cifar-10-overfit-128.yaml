@@ -38,6 +38,7 @@ attn_dropout: 0 # we do not apply dropout within the attention blocks [...] and 
 resid_dropout: 0.05 # only apply it at the end of each residual addition
 bias: False # do we use bias inside LayerNorm and Linear layers?
 rematerialization_steps: 1 # number of activation checkpointing steps
+use_selective_checkpointing: True
 
 # adamw optimizer
 learning_rate: 0.00035 # max learning rate
