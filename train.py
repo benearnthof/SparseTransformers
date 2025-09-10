@@ -20,7 +20,7 @@ import yaml
 import json
 
 # TODO: pass this as commandline argument
-cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-overfit-128.yaml")
+cfg = OmegaConf.load(r"/root/SparseTransformers/config/selective-checkpointing.yaml")
 
 with open("config.json", "w") as f:
     json.dump(dict(cfg), f, indent=2)
