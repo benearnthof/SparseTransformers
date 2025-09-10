@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 # gradient/activation checkpointing
-from torch.utils.checkpoint import checkpoint_sequential
+from torch.utils.checkpoint import checkpoint_sequential, checkpoint
 
 class LayerNorm(nn.Module):
   """LayerNorm with optional bias"""
@@ -93,17 +93,37 @@ class MLP(nn.Module):
         return x
 
 class Block(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
         self.attn = CausalSelfAttention(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.mlp = MLP(config)
+        self.config = config
+
+    def forward_attention(self, x):
+        # This will be checkpointed (recomputed)
+        return self.attn(self.ln_1(x))
+
+    def forward_mlp(self, x):
+        # This will be kept in memory
+        return self.mlp(self.ln_2(x))
 
     def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        x = x + self.mlp(self.ln_2(x))
+        # Use checkpoint for attention, keep MLP in memory
+        if self.training and self.config.use_selective_checkpointing:
+            # Checkpoint the attention computation
+            attn_output = torch.utils.checkpoint.checkpoint(
+                self.forward_attention, 
+                x, 
+                use_reentrant=False
+            )
+            x = x + attn_output
+            x = x + self.forward_mlp(x)
+        else:
+            # Standard forward pass
+            x = x + self.attn(self.ln_1(x))
+            x = x + self.mlp(self.ln_2(x))
         return x
 
 @dataclass
@@ -119,6 +139,7 @@ class GPTConfig:
     resid_dropout: float = 0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
     rematerialization_steps: int = 8 # activation checkpointing to reduce GPU memory requirements of very deep nets
+    use_selective_checkpointing: bool = True
 
 class GPT(nn.Module):
 
@@ -215,11 +236,11 @@ class GPT(nn.Module):
         x = self.transformer.drop(tok_emb + row_emb + col_emb + chan_emb)
         
         # activation checkpointing as specified in config
-        segments = self.config.rematerialization_steps
-        x = checkpoint_sequential(self.transformer.h, segments, x, use_reentrant=False)
+        # segments = self.config.rematerialization_steps
+        # x = checkpoint_sequential(self.transformer.h, segments, x, use_reentrant=False)
 
-        # for block in self.transformer.h:
-        #     x = block(x)
+        for block in self.transformer.h:
+            x = block(x)
 
         x = self.transformer.ln_f(x)
 
