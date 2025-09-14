@@ -15,4 +15,6 @@ mv val.bin data_dir/
 pip install wandb
 pip install omegaconf
 pip install matplotlib
+pip install deepspeed
+
 wandb init

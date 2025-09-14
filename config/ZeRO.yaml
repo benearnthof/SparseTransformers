@@ -19,10 +19,8 @@ wandb_run_name: 'ZeRO-ckpt' # 'run' + str(time.time())
 # data
 dataset: 'cifar-10'
 overfit: True
-gradient_accumulation_steps: 2 # used to simulate larger batch sizes
+gradient_accumulation_steps: 2 # must be a multiple of the number of available GPUs
 batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
-# 6 seconds per batch for 24 batch size and 30 gradient accumulation steps
-# 300 ms for 48 batch size and 1 gradient accumulation step
 block_size: 3072
 
 # model
@@ -54,6 +52,37 @@ decay_lr: True # whether to decay the learning rate
 warmup_iters: 0 # how many steps to warm up for
 lr_decay_iters: 5000 # should be ~= max_iters per Chinchilla
 min_lr: 0.000035 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
+# DeepSpeed Config for ZeRO and CPU offloading
+use_deepspeed: True
+deepspeed:
+  train_batch_size: 16
+  zero_optimization:
+    stage: 3
+    allgather_partitions: true
+    allgather_bucket_size: 2e8
+    reduce_scatter: true
+    reduce_bucket_size: 2e8
+    contiguous_gradients: true
+    offload_optimizer:
+      device: cpu
+      pin_memory: true
+    offload_param:
+      device: cpu
+      pin_memory: true
+      buffer_count: 5
+      buffer_size: 1e8
+  fp16:
+    enabled: false
+  bf16:
+    enabled: true
+  optimizer:
+    type: Adam # https://www.deepspeed.ai/docs/config-json/#optimizer-parameters
+    params:
+      lr: 0.00035
+      betas: [0.9, 0.95]
+      weight_decay: 0.01
+      eps: 1e-8
+
 # DDP settings
 backend: nccl # 'nccl', 'gloo', etc.
 # System settings

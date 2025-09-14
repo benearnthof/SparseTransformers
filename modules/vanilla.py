@@ -8,6 +8,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+import deepspeed
+
 # gradient/activation checkpointing
 from torch.utils.checkpoint import checkpoint_sequential, checkpoint
 
@@ -161,8 +163,6 @@ class GPT(nn.Module):
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        # removed weight tying
-        # self.transformer.wte.weight = self.lm_head.weight
         # init all weights
         self.apply(self._init_weights)
         # Section 6: The weight matrix for the output logits was initialized to 0.
@@ -257,8 +257,13 @@ class GPT(nn.Module):
         return logits, loss
 
 
-    def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
-        # TODO: functtion should take in cfg dict and initialize ZeRO correctly.
+    def configure_optimizers(self, cfg):
+        """
+        Configure optimizers for DDP.
+        Basic implementation only requires the following keys in cfg:
+            weight_decay, learning_rate, betas, device_type
+        If cfg.use_deepspeed is True, everything is set up for ZeRO and CPU offloading.
+        """
         # start with all of the candidate parameters
         param_dict = {pn: p for pn, p in self.named_parameters()}
         # filter out those that do not require grad
@@ -275,14 +280,21 @@ class GPT(nn.Module):
         num_nodecay_params = sum(p.numel() for p in nodecay_params)
         print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
         print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
-        # Create AdamW optimizer and use the fused version if it is available
-        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
-        use_fused = fused_available and device_type == 'cuda'
-        extra_args = dict(fused=True) if use_fused else dict()
-        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
-        print(f"using fused AdamW: {use_fused}")
+        # backwards compatibility
+        if not cfg.use_deepspeed:
+            # Create AdamW optimizer and use the fused version if it is available
+            fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
+            use_fused = fused_available and device_type == 'cuda'
+            extra_args = dict(fused=True) if use_fused else dict()
+            optimizer = torch.optim.AdamW(optim_groups, lr=cfg.learning_rate, betas=cfg.betas, **extra_args)
+            print(f"using fused AdamW: {use_fused}")
+            return optimizer
+        else:
+            model_engine, optimizer, _, _ = deepspeed.initialize(
+                args=cfg.deepspeed, model=self, model_parameters=optim_groups
+            )
+            return model_engine, optimizer
 
-        return optimizer
 
     def estimate_mfu(self, fwdbwd_per_iter, dt):
         """ estimate model flops utilization (MFU) in units of A100 bfloat16 peak FLOPS """

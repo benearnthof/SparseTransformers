@@ -22,7 +22,7 @@ from modules.vanilla import GPT, GPTConfig
 from utils import get_batch, generate_samples 
 
 # TODO: pass this as commandline argument
-cfg = OmegaConf.load(r"/root/SparseTransformers/config/ZeRO.yaml")
+cfg = OmegaConf.load(r"./config/ZeRO.yaml")
 
 with open("config.json", "w") as f:
     json.dump(dict(cfg), f, indent=2)
@@ -93,33 +93,50 @@ model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 2
 gptconf = GPTConfig(**model_args)
 
 print(gptconf)
+# init model but move to device later (deepspeed compatibility)
+model = GPT(gptconf)
 
-model = GPT(gptconf).to(cfg.device)
+if cfg.use_deepspeed:
+    # This returns model_engine + optimizer wrapper
+    model_engine, optimizer = model.configure_optimizers(cfg)
+else:
+    model = model.to(cfg.device)
+    optimizer = model.configure_optimizers(cfg)
+
 if master_process:
-    print_peak_memory("Max memory allocated after creating local model", 0)
+    print_peak_memory("Max memory allocated after creating model/engine", 0)
 
 
 if cfg.ckpt_path is not None:
     print(f"Loading pretrained model from {cfg.ckpt_path}")
-    full_checkpoint = torch.load(cfg.ckpt_path, map_location=cfg.device, weights_only=False)
-    model_state_dict, optim_state_dict = full_checkpoint["model"], full_checkpoint["optimizer"]
-    new_state_dict = OrderedDict()
-    # DDP attaches prefix to state dict keys, to load we just remove them
-    for k, v in model_state_dict.items():
-        new_key = k.replace("_orig_mod.", "")
-        new_state_dict[new_key] = v
+    if cfg.use_deepspeed:
+        # Let deepspeed handle checkpoint partitioning
+        # Expects folder with mp_rank_*/ files inside
+        load_path, client_state = model_engine.load_checkpoint(
+            cfg.ckpt_path,
+            tag=None,  # https://www.deepspeed.ai/getting-started/#model-checkpointing
+        )
+        if load_path is None:
+            print(f"WARNING: No DeepSpeed checkpoint found at {cfg.ckpt_path}")
+        else:
+            print(f"DeepSpeed checkpoint loaded successfully from {load_path}")
+    else:
+        # Vanilla torch checkpoint
+        full_checkpoint = torch.load(cfg.ckpt_path, map_location=cfg.device)
+        model_state_dict, optim_state_dict = full_checkpoint["model"], full_checkpoint["optimizer"]
 
-    model.load_state_dict(new_state_dict)
-    # TODO: optimizer setup & configuration for ZeRO variants
-    optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
-    optimizer.load_state_dict(optim_state_dict)
-    print(f"Model and optimizer state dicts matched successfully.")
-    full_checkpoint, checkpoint, model_state_dict, optim_state_dict, new_state_dict = None, None, None, None, None # free up memory
-else: 
-    print(f"Training from scratch.")
-    # optimizer
-    optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
-    checkpoint = None # free up memory
+        # DDP adds `_orig_mod.` to keys
+        new_state_dict = OrderedDict(
+            (k.replace("_orig_mod.", ""), v) for k, v in model_state_dict.items()
+        )
+        model.load_state_dict(new_state_dict)
+        optimizer.load_state_dict(optim_state_dict)
+        print(f"Model + optimizer state dicts loaded successfully.")
+        # free up memory
+        del full_checkpoint, model_state_dict, optim_state_dict, new_state_dict
+else:
+    print("Training from scratch.")
+    checkpoint = None
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(cfg.dtype == 'float16'))
@@ -140,13 +157,14 @@ def estimate_loss():
         for k in range(cfg.eval_iters):
             X, Y = get_batch(split, cfg)
             with ctx:
-                logits, loss = model(X, Y)
+                logits, loss = model(X, Y) # TODO: DeepSpeed
             losses[k] = loss.item()
         out[split] = losses.mean()
     model.train()
     return out
 
 # learning rate decay scheduler (cosine with warmup)
+# TODO: move to DeepSpeed
 def get_lr(it):
     # 1) linear warmup for warmup_iters steps
     if it < cfg.warmup_iters:
@@ -172,7 +190,7 @@ if cfg.debug_memory:
     torch.cuda.memory._record_memory_history(max_entries=100000)
     for _ in range(2):
         with ctx:
-            logits, loss = raw_model(X, Y)
+            logits, loss = raw_model(X, Y) # TODO: DeepSpeed
             loss = loss / cfg.gradient_accumulation_steps
         scaler.scale(loss).backward()
         if cfg.grad_clip != 0.0:
@@ -233,18 +251,31 @@ while True:
         if losses['val'] < best_val_loss or cfg.always_save_checkpoint:
             best_val_loss = losses['val']
             if iter_num > 0:
-                checkpoint = {
-                    'model': raw_model.state_dict(),
-                    # TODO: consolidate state_dicts for ZeRO
-                    'optimizer': optimizer.state_dict(),
-                    'model_args': model_args,
-                    'iter_num': iter_num,
-                    'best_val_loss': best_val_loss,
-                    'config': cfg,
-                }
-                print(f"saving checkpoint to {cfg.out_dir}")
-                # TODO: more descriptive checkpoint names
-                torch.save(checkpoint, os.path.join(cfg.out_dir, f'{cfg.wandb_run_name}_ckpt.pt'))
+                if cfg.use_deepspeed:
+                    client_state = {
+                        'model_args': model_args,
+                        'iter_num': iter_num,
+                        'best_val_loss': best_val_loss,
+                        'config': cfg,
+                    }
+                    save_dir = os.path.join(cfg.out_dir, f'{cfg.wandb_run_name}_ds_ckpt')
+                    # TODO: use val_loss as checkpoint tag
+                    tag = f"step_{iter_num}"
+                    print(f"[DeepSpeed] saving checkpoint to {save_dir}, tag {tag}")
+                    model_engine.save_checkpoint(save_dir, tag=tag, client_state=client_state)
+                else:
+                    # vanilla torch checkpoint
+                    checkpoint = {
+                        'model': raw_model.state_dict(),
+                        'optimizer': optimizer.state_dict(),
+                        'model_args': model_args,
+                        'iter_num': iter_num,
+                        'best_val_loss': best_val_loss,
+                        'config': cfg,
+                    }
+                    print(f"saving checkpoint to {cfg.out_dir}")
+                    # TODO: more descriptive checkpoint names
+                    torch.save(checkpoint, os.path.join(cfg.out_dir, f'{cfg.wandb_run_name}_ckpt.pt'))
     if iter_num == 0 and cfg.eval_only:
         break
 
@@ -258,7 +289,7 @@ while True:
             # looking at the source of that context manager, it just toggles this variable
             model.require_backward_grad_sync = (micro_step == cfg.gradient_accumulation_steps - 1)
         with ctx:
-            logits, loss = model(X, Y)
+            logits, loss = model(X, Y) # TODO: DeepSpeed
             loss = loss / cfg.gradient_accumulation_steps # scale the loss to account for gradient accumulation
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
         X, Y = get_batch('train', cfg)
