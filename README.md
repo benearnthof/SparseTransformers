@@ -41,10 +41,12 @@ for pn, p in self.named_parameters():
 
 #### TODO
 * Split Vanilla Implementation from DeepSpeed Implementation
+* Maybe do full picotron style implementation of 4D parallelism https://github.com/huggingface/picotron/tree/main
 * Add functionality for ZeRO-based sharded optimizers https://docs.pytorch.org/tutorials/recipes/zero_redundancy_optimizer.html & https://docs.pytorch.org/docs/stable/distributed.optim.html https://github.com/deepspeedai/DeepSpeed/tree/master for ZeRO-1to3 https://deepspeed.readthedocs.io/en/latest/zero3.html
 * Visualize positional encodings to clarify what's going on  
 * Try training with sparse pytorch implementation & torch.compile  
-* Implement blocksparse CUDA kernels  
+* Implement blocksparse CUDA kernels
+* Large Batch Optimization with DeepSpeed LAMB https://arxiv.org/pdf/1904.00962
 * add other masking variants (bidirectional training should only require adding a couple lines of code)  
 * Data augmentation à la https://arxiv.org/abs/1909.13719  
 * Learning rate scaling with batch size https://arxiv.org/pdf/1706.02677  
