@@ -256,11 +256,6 @@ class GPT(nn.Module):
 
         return logits, loss
 
-    @classmethod
-    def from_pretrained(cls, model_type, override_args=None):
-        pass
-        # TODO: Implement for easy checkpointing
-        # return model
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
         # start with all of the candidate parameters

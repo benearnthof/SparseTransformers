@@ -6,6 +6,11 @@ import numpy as np
 import time
 import math
 import pickle
+import yaml
+import json
+from omegaconf import OmegaConf
+from collections import OrderedDict
+
 from contextlib import nullcontext
 
 import torch
@@ -15,12 +20,8 @@ from torch.distributed import init_process_group, destroy_process_group
 from modules.vanilla import GPT, GPTConfig
 from utils import get_batch, generate_samples 
 
-from omegaconf import OmegaConf
-import yaml
-import json
-
 # TODO: pass this as commandline argument
-cfg = OmegaConf.load(r"/root/SparseTransformers/config/cifar-10-overfit-128.yaml")
+cfg = OmegaConf.load(r"/root/SparseTransformers/config/ZeRO.yaml")
 
 with open("config.json", "w") as f:
     json.dump(dict(cfg), f, indent=2)
@@ -90,12 +91,28 @@ print(gptconf)
 
 model = GPT(gptconf).to(cfg.device)
 
+if cfg.ckpt_path is not None:
+    print(f"Loading pretrained model from {cfg.ckpt_path}")
+    full_checkpoint = torch.load(cfg.ckpt_path, map_location=cfg.device, weights_only=False)
+    model_state_dict, optim_state_dict = full_checkpoint["model"], full_checkpoint["optimizer"]
+    new_state_dict = OrderedDict()
+    # DDP attaches prefix to state dict keys, to load we just remove them
+    for k, v in model_state_dict.items():
+        new_key = k.replace("_orig_mod.", "")
+        new_state_dict[new_key] = v
+
+    model.load_state_dict(new_state_dict)
+    optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
+    optimizer.load_state_dict(optim_state_dict)
+    print(f"Model and optimizer state dicts matched successfully.")
+else: 
+    print(f"Training from scratch.")
+    # optimizer
+    optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
+    checkpoint = None # free up memory
+
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(cfg.dtype == 'float16'))
-
-# optimizer
-optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
-checkpoint = None # free up memory
 
 # wrap model into DDP container & always compile
 if ddp:
@@ -131,14 +148,6 @@ def get_lr(it):
     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
     return cfg.min_lr + coeff * (cfg.learning_rate - cfg.min_lr)
 
-# logging
-if cfg.wandb_log and master_process:
-    import wandb
-    wandb.init(project=cfg.wandb_project, name=cfg.wandb_run_name + f"{str(time.time())}", config=dict(cfg))
-    artifact = wandb.Artifact("config", type="config")
-    artifact.add_file("config.json")
-    wandb.log_artifact(artifact)
-
 # training loop
 X, Y = get_batch('train', cfg) # fetch the very first batch
 t0 = time.time()
@@ -146,7 +155,7 @@ local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
 running_mfu = -1.0
 
-# for troubleshooting memory usage to optimize batchsize etc.
+# perform two passes through the network and save memory stacktrace
 if cfg.debug_memory:
     torch.cuda.memory._record_memory_history(max_entries=100000)
     for _ in range(2):
@@ -164,12 +173,26 @@ if cfg.debug_memory:
         optimizer.zero_grad(set_to_none=True)
     try:
         torch.cuda.memory._dump_snapshot(
+            # TODO: more descriptive file name
             f"layers_{cfg.n_layer}_remat_{cfg.rematerialization_steps}_batchsize_{cfg.batch_size}.pickle"
             )
     except Exception as e:
         print(f"Failed to capture memory snapshot {e}")
     # Stop recording memory snapshot history.
     torch.cuda.memory._record_memory_history(enabled=None)
+
+# logging
+if cfg.wandb_log and master_process:
+    import wandb
+    wandb.init(project=cfg.wandb_project, name=cfg.wandb_run_name + f"{str(time.time())}", config=dict(cfg))
+    artifact = wandb.Artifact("config", type="config")
+    artifact.add_file("config.json")
+    wandb.log_artifact(artifact)
+    if cfg.debug_memory:
+        artifact = wandb.Artifact("memory_snapshot", type="memory_snapshot")
+        artifact.add_file(f"layers_{cfg.n_layer}_remat_{cfg.rematerialization_steps}_batchsize_{cfg.batch_size}.pickle")
+        wandb.log_artifact(artifact)
+        print(f"Logged memory snapshot to W&B.")
 
 while True:
     # determine and set the learning rate for this iteration
@@ -207,7 +230,8 @@ while True:
                     'config': cfg,
                 }
                 print(f"saving checkpoint to {cfg.out_dir}")
-                torch.save(checkpoint, os.path.join(cfg.out_dir, 'ckpt.pt'))
+                # TODO: more descriptive checkpoint names
+                torch.save(checkpoint, os.path.join(cfg.out_dir, f'{cfg.wandb_run_name}_ckpt.pt'))
     if iter_num == 0 and cfg.eval_only:
         break
 
@@ -258,10 +282,3 @@ while True:
 
 if ddp:
     destroy_process_group()
-
-# Goal for today: 
-# Sampling during training & log samples on wandb
-# Overfit on train data on small model
-# implement correct positional encoding
-# remove data leakage from data loader
-
