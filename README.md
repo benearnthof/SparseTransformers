@@ -10,7 +10,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 ## Notes and todo list  
 ### Memory profiling & Performance
 #### Features
-* Activation Checkpointing to decrease GPU memory requirements for very deep transformers
+* Selective Activation Checkpointing to decrease GPU memory requirements for very deep transformers
 * Automatic mixed precision
 * DDP Training via `torchrun --standalone --nproc_per_node=2 train.py config/cifar-10-ddp.yaml`
 * During evaluation masked images are sampled and logged on wandb with their respective predictions
@@ -20,7 +20,6 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * To visualize the .pickle files this produces head over to [https://docs.pytorch.org/memory_viz](https://docs.pytorch.org/memory_viz)
 
 #### TODO
-* Selective Activation Checkpointing: [As implemented here](https://github.com/Dao-AILab/flash-attention/blob/dfb664994c1e5056961c90d5e4f70bf7acc8af10/flash_attn/modules/mha.py#L655) We only want to checkpoint expensive feedforward computations.
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
 * Investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
@@ -38,9 +37,10 @@ for pn, p in self.named_parameters():
     if pn.endswith('c_proj.weight'):
         torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
 ```
+* Pretrained models can be loaded from checkpoint
 
 #### TODO
-* resume training from checkpoint  
+* Add functionality for ZeRO-based sharded optimizers https://docs.pytorch.org/tutorials/recipes/zero_redundancy_optimizer.html & https://docs.pytorch.org/docs/stable/distributed.optim.html https://github.com/deepspeedai/DeepSpeed/tree/master for ZeRO-1to3
 * Visualize positional encodings to clarify what's going on  
 * Try training with sparse pytorch implementation & torch.compile  
 * Implement blocksparse CUDA kernels  

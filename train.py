@@ -16,6 +16,7 @@ from contextlib import nullcontext
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
+from torch.distributed.optim import ZeroRedundancyOptimizer
 
 from modules.vanilla import GPT, GPTConfig
 from utils import get_batch, generate_samples 
@@ -25,6 +26,10 @@ cfg = OmegaConf.load(r"/root/SparseTransformers/config/ZeRO.yaml")
 
 with open("config.json", "w") as f:
     json.dump(dict(cfg), f, indent=2)
+
+def print_peak_memory(prefix, device):
+    if device == 0:
+        print(f"{prefix}: {torch.cuda.max_memory_allocated(device) // 1e6}MB ")
 
 # system
 ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
@@ -90,6 +95,9 @@ gptconf = GPTConfig(**model_args)
 print(gptconf)
 
 model = GPT(gptconf).to(cfg.device)
+if master_process:
+    print_peak_memory("Max memory allocated after creating local model", 0)
+
 
 if cfg.ckpt_path is not None:
     print(f"Loading pretrained model from {cfg.ckpt_path}")
@@ -102,6 +110,7 @@ if cfg.ckpt_path is not None:
         new_state_dict[new_key] = v
 
     model.load_state_dict(new_state_dict)
+    # TODO: optimizer setup & configuration for ZeRO variants
     optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
     optimizer.load_state_dict(optim_state_dict)
     print(f"Model and optimizer state dicts matched successfully.")
@@ -118,6 +127,8 @@ scaler = torch.cuda.amp.GradScaler(enabled=(cfg.dtype == 'float16'))
 # wrap model into DDP container & always compile
 if ddp:
     model = DDP(torch.compile(model), device_ids=[ddp_local_rank])
+if master_process:
+    print_peak_memory("Max memory allocated after creating DDP", 0)
 
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()
@@ -224,6 +235,7 @@ while True:
             if iter_num > 0:
                 checkpoint = {
                     'model': raw_model.state_dict(),
+                    # TODO: consolidate state_dicts for ZeRO
                     'optimizer': optimizer.state_dict(),
                     'model_args': model_args,
                     'iter_num': iter_num,

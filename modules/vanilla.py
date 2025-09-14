@@ -258,6 +258,7 @@ class GPT(nn.Module):
 
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
+        # TODO: functtion should take in cfg dict and initialize ZeRO correctly.
         # start with all of the candidate parameters
         param_dict = {pn: p for pn, p in self.named_parameters()}
         # filter out those that do not require grad
