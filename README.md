@@ -53,6 +53,7 @@ for pn, p in self.named_parameters():
 * Stochastic Depth https://arxiv.org/pdf/1603.09382  
 * Weight init with truncated Gaussian https://arxiv.org/pdf/1803.01719  
 * Try the GPT-2 style architecture from https://proceedings.mlr.press/v119/chen20s/chen20s.pdf
+* FP4 All the Way: Fully Quantized Training of LLMs https://arxiv.org/pdf/2505.19115  
 * Memory efficient finetuning with LoRA/QLoRA
 * Data parallel finetuning  
 * Parameter sharding during finetuning (https://www.youtube.com/watch?v=xzBcBJ8_rzM) FSDP  
