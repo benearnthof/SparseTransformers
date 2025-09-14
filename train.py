@@ -105,6 +105,7 @@ if cfg.ckpt_path is not None:
     optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
     optimizer.load_state_dict(optim_state_dict)
     print(f"Model and optimizer state dicts matched successfully.")
+    full_checkpoint, checkpoint, model_state_dict, optim_state_dict, new_state_dict = None, None, None, None, None # free up memory
 else: 
     print(f"Training from scratch.")
     # optimizer
