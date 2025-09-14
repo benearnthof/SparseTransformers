@@ -40,7 +40,7 @@ for pn, p in self.named_parameters():
 * Pretrained models can be loaded from checkpoint
 
 #### TODO
-* Add functionality for ZeRO-based sharded optimizers https://docs.pytorch.org/tutorials/recipes/zero_redundancy_optimizer.html & https://docs.pytorch.org/docs/stable/distributed.optim.html https://github.com/deepspeedai/DeepSpeed/tree/master for ZeRO-1to3
+* Add functionality for ZeRO-based sharded optimizers https://docs.pytorch.org/tutorials/recipes/zero_redundancy_optimizer.html & https://docs.pytorch.org/docs/stable/distributed.optim.html https://github.com/deepspeedai/DeepSpeed/tree/master for ZeRO-1to3 https://deepspeed.readthedocs.io/en/latest/zero3.html
 * Visualize positional encodings to clarify what's going on  
 * Try training with sparse pytorch implementation & torch.compile  
 * Implement blocksparse CUDA kernels  
