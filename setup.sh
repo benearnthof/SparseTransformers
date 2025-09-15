@@ -16,5 +16,11 @@ pip install wandb
 pip install omegaconf
 pip install matplotlib
 pip install deepspeed
+pip install mpi4py
+
+apt-get update
+apt-get install -y libopenmpi-dev openmpi-bin
+pip install --force-reinstall --no-cache-dir mpi4py
+export DEEPSPEED_COMM_BACKEND=nccl
 
 wandb init

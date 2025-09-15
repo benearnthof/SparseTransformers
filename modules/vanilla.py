@@ -273,7 +273,7 @@ class GPT(nn.Module):
         decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
         nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
         optim_groups = [
-            {'params': decay_params, 'weight_decay': weight_decay},
+            {'params': decay_params, 'weight_decay': cfg.weight_decay},
             {'params': nodecay_params, 'weight_decay': 0.0}
         ]
         num_decay_params = sum(p.numel() for p in decay_params)
@@ -290,8 +290,9 @@ class GPT(nn.Module):
             print(f"using fused AdamW: {use_fused}")
             return optimizer
         else:
+
             model_engine, optimizer, _, _ = deepspeed.initialize(
-                args=cfg.deepspeed, model=self, model_parameters=optim_groups
+                config="ds_config.json", model=self, model_parameters=optim_groups
             )
             return model_engine, optimizer
 

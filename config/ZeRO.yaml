@@ -14,7 +14,7 @@ ckpt_path: "/root/SparseTransformers/out/ckpt.pt" # if ckpt_path is not None we 
 # wandb logging
 wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
-wandb_run_name: 'ZeRO-ckpt' # 'run' + str(time.time())
+wandb_run_name: 'DeepSpeed-ZeRO-3-1GPU' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
@@ -52,29 +52,34 @@ decay_lr: True # whether to decay the learning rate
 warmup_iters: 0 # how many steps to warm up for
 lr_decay_iters: 5000 # should be ~= max_iters per Chinchilla
 min_lr: 0.000035 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
+# DDP settings
+backend: nccl # 'nccl', 'gloo', etc.
+# System settings
+device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
+dtype: bfloat16 # if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
+compile: True # use PyTorch 2.0 to compile the model to be faster
+
 # DeepSpeed Config for ZeRO and CPU offloading
 use_deepspeed: True
 deepspeed:
   train_batch_size: 16
   zero_optimization:
     stage: 3
-    allgather_partitions: true
+    allgather_partitions: True
     allgather_bucket_size: 2e8
-    reduce_scatter: true
+    reduce_scatter: True
     reduce_bucket_size: 2e8
-    contiguous_gradients: true
+    contiguous_gradients: True
     offload_optimizer:
       device: cpu
-      pin_memory: true
+      pin_memory: True
     offload_param:
       device: cpu
-      pin_memory: true
+      pin_memory: True
       buffer_count: 5
       buffer_size: 1e8
-  fp16:
-    enabled: false
-  bf16:
-    enabled: true
+  bf16: # TODO: see if fp16 with loss_scale makes a difference 
+    enabled: True
   optimizer:
     type: Adam # https://www.deepspeed.ai/docs/config-json/#optimizer-parameters
     params:
@@ -83,9 +88,3 @@ deepspeed:
       weight_decay: 0.01
       eps: 1e-8
 
-# DDP settings
-backend: nccl # 'nccl', 'gloo', etc.
-# System settings
-device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
-dtype: bfloat16 # if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
-compile: True # use PyTorch 2.0 to compile the model to be faster
