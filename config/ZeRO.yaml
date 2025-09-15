@@ -14,13 +14,13 @@ ckpt_path: "/root/SparseTransformers/out/ckpt.pt" # if ckpt_path is not None we 
 # wandb logging
 wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
-wandb_run_name: 'DeepSpeed-ZeRO-3-8GPU' # 'run' + str(time.time())
+wandb_run_name: 'DeepSpeed-ZeRO-2-2GPU' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
 overfit: True
 gradient_accumulation_steps: 1 # IF DDP: must be a multiple of the number of available GPUs
-batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
+batch_size: 2 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size: 3072
 
 # model
@@ -41,7 +41,7 @@ use_selective_checkpointing: False
 # adamw optimizer
 learning_rate: 0.00035 # max learning rate
 # 120 epochs of 50k images: 6 million iterations / batch size: 500k iters
-max_iters: 100 # total number of training iterations
+max_iters: 3000 # total number of training iterations
 weight_decay: 0.01
 beta1: 0.9
 beta2: 0.95
@@ -64,7 +64,7 @@ use_deepspeed: True
 deepspeed:
   train_batch_size: 16
   zero_optimization:
-    stage: 3
+    stage: 2
     allgather_partitions: True
     allgather_bucket_size: 2e8
     reduce_scatter: True
