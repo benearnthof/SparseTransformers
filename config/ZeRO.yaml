@@ -14,7 +14,7 @@ ckpt_path: "/root/SparseTransformers/out/ckpt.pt" # if ckpt_path is not None we 
 # wandb logging
 wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
-wandb_run_name: 'DeepSpeed-ZeRO-3-4GPU' # 'run' + str(time.time())
+wandb_run_name: 'DeepSpeed-ZeRO-3-8GPU' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
