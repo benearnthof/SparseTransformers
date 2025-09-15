@@ -14,12 +14,12 @@ ckpt_path: "/root/SparseTransformers/out/ckpt.pt" # if ckpt_path is not None we 
 # wandb logging
 wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
-wandb_run_name: 'DeepSpeed-ZeRO-3-1GPU' # 'run' + str(time.time())
+wandb_run_name: 'DeepSpeed-ZeRO-3-4GPU' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
 overfit: True
-gradient_accumulation_steps: 2 # must be a multiple of the number of available GPUs
+gradient_accumulation_steps: 1 # IF DDP: must be a multiple of the number of available GPUs
 batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size: 3072
 

@@ -12,19 +12,25 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 #### Features
 * Selective Activation Checkpointing to decrease GPU memory requirements for very deep transformers
 * Automatic mixed precision
-* DDP Training via `torchrun --standalone --nproc_per_node=2 train.py config/cifar-10-ddp.yaml`
+* DDP Training via `torchrun --nproc_per_node=x train.py | tee ds_run.log`
+* DeepSpeed Training for the performance features listed below can be set in config
 * During evaluation masked images are sampled and logged on wandb with their respective predictions
 * To avoid data leakage from image to image the last target byte y[-1] is set to the last input byte x[-1]  
 * Adjusted positional encodings for image data, see below.
 * GPU memory profiling can be enabled with `debug_memory` in config.
 * To visualize the .pickle files this produces head over to [https://docs.pytorch.org/memory_viz](https://docs.pytorch.org/memory_viz)
+* Zero Redundancy Optimizers (1-3) are available via DeepSpeed Training  
+
 
 #### TODO
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
 * Investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
-* Mixed precision training with torch.distributed.fsdp MixedPrecisionPolicy (Section 5.6 in paper, should help scale training across multiple nodes)
-* torch.amp.GradScaler("cuda", args...) for gradient scaling with mixed precision to prevent underflow for small values
+* Custom Mixed precision training with torch.distributed.fsdp MixedPrecisionPolicy (Section 5.6 in paper, should help scale training across multiple nodes)
+* DeepSpeed Tensor Parallelism
+* DeepSpeed Pipeline Parallelism
+* Implement custom parallel models like picotron
+* Benchmark DeepSpeed settings
 
 ### Functionality
 * Parameters & Embeddings are initialized like specified in section 6 of the paper
@@ -42,7 +48,6 @@ for pn, p in self.named_parameters():
 #### TODO
 * Split Vanilla Implementation from DeepSpeed Implementation
 * Maybe do full picotron style implementation of 4D parallelism https://github.com/huggingface/picotron/tree/main
-* Add functionality for ZeRO-based sharded optimizers https://docs.pytorch.org/tutorials/recipes/zero_redundancy_optimizer.html & https://docs.pytorch.org/docs/stable/distributed.optim.html https://github.com/deepspeedai/DeepSpeed/tree/master for ZeRO-1to3 https://deepspeed.readthedocs.io/en/latest/zero3.html
 * Visualize positional encodings to clarify what's going on  
 * Try training with sparse pytorch implementation & torch.compile  
 * Implement blocksparse CUDA kernels
@@ -57,7 +62,6 @@ for pn, p in self.named_parameters():
 * Memory efficient finetuning with LoRA/QLoRA
 * Data parallel finetuning  
 * Parameter sharding during finetuning (https://www.youtube.com/watch?v=xzBcBJ8_rzM) FSDP  
-* CPU offloading: Move optimizer state to CPU
 * FSDP2 x QLoRA in torchtune
 * AdamW8bit/4bit etc. api https://openreview.net/pdf?id=nN8TnHB5nw
 * Activation CPU offloading with streams (torchtune OffloadActivations context manager)
@@ -76,6 +80,10 @@ https://docs.pytorch.org/docs/stable/checkpoint.html
 https://docs.pytorch.org/tutorials/intermediate/FSDP_tutorial.html  
 https://docs.pytorch.org/torchtune/0.6/tutorials/memory_optimizations.html  
 https://github.com/pytorch/ao  
+https://docs.pytorch.org/tutorials/recipes/zero_redundancy_optimizer.html  
+https://docs.pytorch.org/docs/stable/distributed.optim.html  
+https://github.com/deepspeedai/DeepSpeed/tree/master  
+https://deepspeed.readthedocs.io/en/latest/zero3.html  
 
 ### On positional Encoding
 In addition to the embedding of input symbols, positional embeddings are typically used in Transformers and other location-agnostic architectures to encode the spatial relationships of data (Gehring et al., 2017), (Parmar et al., 2018).

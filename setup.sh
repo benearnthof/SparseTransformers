@@ -21,6 +21,12 @@ pip install mpi4py
 apt-get update
 apt-get install -y libopenmpi-dev openmpi-bin
 pip install --force-reinstall --no-cache-dir mpi4py
+# make sure to export these on new GPU nodes
 export DEEPSPEED_COMM_BACKEND=nccl
+export NCCL_DEBUG=INFO
+export NCCL_P2P_LEVEL=SYS
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
+export DS_LOG_LEVEL=debug
+
 
 wandb init
