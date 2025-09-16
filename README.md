@@ -48,6 +48,7 @@ for pn, p in self.named_parameters():
 
 #### TODO
 * Split Vanilla Implementation from DeepSpeed Implementation
+* Learning Rate Scheduler can be passed as config argument for DeepSpeed https://deepspeed.readthedocs.io/en/latest/schedulers.html  
 * Maybe do full picotron style implementation of 4D parallelism https://github.com/huggingface/picotron/tree/main
 * Visualize positional encodings to clarify what's going on  
 * Try training with sparse pytorch implementation & torch.compile  
