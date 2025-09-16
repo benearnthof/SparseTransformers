@@ -1,0 +1,89 @@
+# hyperparameters
+# I/O
+# very overkill config for a 59M parameter baseline. 
+debug_memory: True
+out_dir: out
+eval_interval: 500
+log_interval: 10
+eval_iters: 10
+eval_imgs: 1 # number of images generated during eval
+eval_only: False # if True, script exits right after the first eval
+always_save_checkpoint: True # if True, always save a checkpoint after each eval
+ckpt_path: "/root/SparseTransformers/out/ckpt.pt" # if ckpt_path is not None we load from checkpoint
+
+# wandb logging
+wandb_log: True # disabled by default
+wandb_project: 'sparse-transformer'
+wandb_run_name: 'DeepSpeed-128-1GPU' # 'run' + str(time.time())
+
+# data
+dataset: 'cifar-10'
+overfit: True
+gradient_accumulation_steps: 1 # IF DDP: must be a multiple of the number of available GPUs
+batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
+block_size: 3072
+
+# model
+# For testing purposes
+n_layer: 128
+n_head: 2
+n_embd: 256
+# mlp_dim is multiplier: 2 => mlp_dimension = 2 * n_embed
+mlp_dim: 2 # half-size projection as per section 7 of the paper
+# kq_dim is the explicit dimension of query and key linear projections
+qk_dim: 128 # half-size projection for queries and keys as per section 7
+attn_dropout: 0 # we do not apply dropout within the attention blocks [...] and instead
+resid_dropout: 0.05 # only apply it at the end of each residual addition
+bias: False # do we use bias inside LayerNorm and Linear layers?
+rematerialization_steps: 1 # number of activation checkpointing steps
+use_selective_checkpointing: False
+
+# adamw optimizer
+learning_rate: 0.00035 # max learning rate
+# 120 epochs of 50k images: 6 million iterations / batch size: 500k iters
+max_iters: 500 # total number of training iterations
+weight_decay: 0.01
+beta1: 0.9
+beta2: 0.95
+# gradient clipping as specified in paper
+grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
+# learning rate decay settings
+decay_lr: True # whether to decay the learning rate
+warmup_iters: 0 # how many steps to warm up for
+lr_decay_iters: 5000 # should be ~= max_iters per Chinchilla
+min_lr: 0.000035 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
+# DDP settings
+backend: nccl # 'nccl', 'gloo', etc.
+# System settings
+device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
+dtype: bfloat16 # if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
+compile: True # use PyTorch 2.0 to compile the model to be faster
+
+# DeepSpeed Config for ZeRO and CPU offloading
+use_deepspeed: True
+deepspeed:
+  train_batch_size: 16
+  zero_optimization:
+    stage: 2
+    allgather_partitions: True
+    allgather_bucket_size: 2e8
+    reduce_scatter: True
+    reduce_bucket_size: 2e8
+    contiguous_gradients: True
+    offload_optimizer:
+      device: cpu
+      pin_memory: True
+    offload_param:
+      device: cpu
+      pin_memory: True
+      buffer_count: 5
+      buffer_size: 1e8
+  bf16: # TODO: see if fp16 with loss_scale makes a difference 
+    enabled: True
+  optimizer:
+    type: Adam # https://www.deepspeed.ai/docs/config-json/#optimizer-parameters
+    params:
+      lr: 0.00035
+      betas: [0.9, 0.95]
+      weight_decay: 0.01
+      eps: 1e-8
