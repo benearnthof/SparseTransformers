@@ -31,6 +31,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * DeepSpeed Pipeline Parallelism
 * Implement custom parallel models like picotron
 * Benchmark DeepSpeed settings
+* Investigate tradeoff between CPU-AdamW vs FusedAdamW vs OneBitAdam vs ZeroOneAdam; Investigate Lamb vs OnebitLamb
 
 ### Functionality
 * Parameters & Embeddings are initialized like specified in section 6 of the paper
@@ -84,6 +85,7 @@ https://docs.pytorch.org/tutorials/recipes/zero_redundancy_optimizer.html
 https://docs.pytorch.org/docs/stable/distributed.optim.html  
 https://github.com/deepspeedai/DeepSpeed/tree/master  
 https://deepspeed.readthedocs.io/en/latest/zero3.html  
+https://deepspeed.readthedocs.io/en/latest/optimizers.html  
 
 ### On positional Encoding
 In addition to the embedding of input symbols, positional embeddings are typically used in Transformers and other location-agnostic architectures to encode the spatial relationships of data (Gehring et al., 2017), (Parmar et al., 2018).
