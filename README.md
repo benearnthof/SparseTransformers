@@ -48,7 +48,12 @@ for pn, p in self.named_parameters():
 
 #### TODO
 * Split Vanilla Implementation from DeepSpeed Implementation
-* Learning Rate Scheduler can be passed as config argument for DeepSpeed https://deepspeed.readthedocs.io/en/latest/schedulers.html  
+* Learning Rate Scheduler can be passed as config argument for DeepSpeed https://deepspeed.readthedocs.io/en/latest/schedulers.html
+* Gradient Clipping can be passed as config argument for DeepSpeed
+* Activation Checkpointing can be passed as config argument for DeepSpeed
+* Sparse Attention can be passed as config argument for DeepSpeed, after updating the nn modules accordingly: https://www.deepspeed.ai/tutorials/sparse-attention/
+* Curriculum learning & Random Layerwise Token Dropping for data efficiency https://www.deepspeed.ai/tutorials/data-efficiency/
+* WandB Logging can be passed as config argumetn for DeepSpeed
 * Maybe do full picotron style implementation of 4D parallelism https://github.com/huggingface/picotron/tree/main
 * Visualize positional encodings to clarify what's going on  
 * Try training with sparse pytorch implementation & torch.compile  
@@ -87,6 +92,9 @@ https://docs.pytorch.org/docs/stable/distributed.optim.html
 https://github.com/deepspeedai/DeepSpeed/tree/master  
 https://deepspeed.readthedocs.io/en/latest/zero3.html  
 https://deepspeed.readthedocs.io/en/latest/optimizers.html  
+https://www.deepspeed.ai/tutorials/sparse-attention/  
+https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/  
+https://www.deepspeed.ai/tutorials/pipeline/
 
 ### On positional Encoding
 In addition to the embedding of input symbols, positional embeddings are typically used in Transformers and other location-agnostic architectures to encode the spatial relationships of data (Gehring et al., 2017), (Parmar et al., 2018).
