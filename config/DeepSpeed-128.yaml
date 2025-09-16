@@ -62,23 +62,26 @@ compile: True # use PyTorch 2.0 to compile the model to be faster
 # DeepSpeed Config for ZeRO and CPU offloading
 use_deepspeed: True
 deepspeed:
+  steps_per_print: 10 # Print progress report every N training steps. Default: 10
+  wall_clock_breakdown: False # Enable timing of the latency of forward/backward/update training phases. Default: False
   train_batch_size: 16 # must be equal to train_micro_batch_size * gradient_accumulation_steps * number of GPUs
   gradient_accumulation_steps: 1 # we provide train_batch_size and gradient_accumulation_steps, number of GPUs is given and micro_batch_size is inferred automatically
   zero_optimization:
-    stage: 2
-    allgather_partitions: True
-    allgather_bucket_size: 2e8
-    reduce_scatter: True
-    reduce_bucket_size: 2e8
-    contiguous_gradients: True
-    offload_optimizer:
+    stage: 1 # [0, 1, 2, 3] refers to disabled, optimizer state partitioning, + gradient state partitioning, + parameter partitioning, respectively
+    allgather_partitions: True # allgather collective vs broadcast collective to gather updated parameters
+    allgather_bucket_size: 5e8 # number of elements allgathered at a time. Default  5e8
+    overlap_comm: True # Attempts to overlap communication with backward computation. Default: False
+    reduce_scatter: True # Uses reduce or reduce scatter instead of allreduce to average gradients. Default: True
+    reduce_bucket_size: 5e8 # Number of elements reduced/allreduced at a time. Limits memory required for allgather for large models. Default 5e8
+    contiguous_gradients: True # Avoids memory fragmentation during backward pass
+    load_from_fp32_weights: True # Init fp32 master weights from fp32 copies in checkpoint. Default: True
+    round_robin_gradients: False # Stage 1 and 2 optimization for CPU offloading. Benefit grows with grad accumulation steps. Default: False
+    offload_optimizer: # valid for stage 1, 2, 3. Offloading optimizer state to CPU or NVMe, optimizer computation on CPU. Parameter offloading is only valid for Stage 3, which we do not use.
       device: cpu
-      pin_memory: True
-    offload_param:
-      device: cpu
-      pin_memory: True
-      buffer_count: 5
-      buffer_size: 1e8
+      pin_memory: True # offload to page-locked CPU memory. Can boost throughput at the cost of memory overhead. Default: False
+      ratio: 1 # Ratio of parameters updating on CPU side. Default: 1
+  zero_quantized_weights: False # Indicates whether to enable communication efficient quantized weights of ZeRO++. Default: False
+  zero_quantized_gradients: False # Indicates whether to enable communication efficient quantized gradients of ZeRO++. Default: False
   bf16: # we stick to bfloat16 since our hardware supports it
     enabled: True
   optimizer:
@@ -88,3 +91,8 @@ deepspeed:
       betas: [0.95, 0.95] # https://arxiv.org/pdf/2505.21829 argues that the choice of equal betas yields robust training for a wide spectrum of settings
       weight_decay: 0.01 # might have to decrease this for larger datasets https://www.arxiv.org/pdf/2405.13698
       eps: 1e-8
+  flops_profiler:
+    enabled: True # Enables flops profiler, also enables wall_clock_breakdown.
+    profile_step: 25 # The global training step at which to profile. Warm up steps are needed for accurate time measurement. Default: 1
+    output_file: null # path to output file, if null the profiler prints to stdout
+    
