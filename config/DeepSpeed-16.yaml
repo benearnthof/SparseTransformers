@@ -9,17 +9,17 @@ eval_iters: 10
 eval_imgs: 1 # number of images generated during eval
 eval_only: False # if True, script exits right after the first eval
 always_save_checkpoint: True # if True, always save a checkpoint after each eval
-ckpt_path: "/root/SparseTransformers/out/ckpt.pt" # if ckpt_path is not None we load from checkpoint
+ckpt_path: Null #"/root/SparseTransformers/out/DeepSpeed-16-1GPU_ds_ckpt" # if ckpt_path is not None we load from checkpoint
 
 # wandb logging
-wandb_log: True # disabled by default
+wandb_log: False # disabled by default
 wandb_project: 'sparse-transformer'
 wandb_run_name: 'DeepSpeed-16-1GPU' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
 overfit: True
-batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
+batch_size: 4 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size: 3072
 
 # model
@@ -47,7 +47,7 @@ compile: True # use PyTorch 2.0 to compile the model to be faster
 # DeepSpeed Config for ZeRO and CPU offloading
 use_deepspeed: True
 deepspeed:
-  steps_per_print: 10 # Print progress report every N training steps. Default: 10
+  steps_per_print: 100 # Print progress report every N training steps. Default: 10
   wall_clock_breakdown: False # Enable timing of the latency of forward/backward/update training phases. Default: False
   train_batch_size: 16 # must be equal to train_micro_batch_size * gradient_accumulation_steps * number of GPUs
   gradient_accumulation_steps: 1 # we provide train_batch_size and gradient_accumulation_steps, number of GPUs is given and micro_batch_size is inferred automatically
@@ -87,4 +87,5 @@ deepspeed:
     enabled: False # Enables flops profiler, also enables wall_clock_breakdown.
     profile_step: 25 # The global training step at which to profile. Warm up steps are needed for accurate time measurement. Default: 1
     output_file: null # path to output file, if null the profiler prints to stdout
-    
+  tensor_parallel:
+    autotp_size: 2 # does this work? https://github.com/deepspeedai/DeepSpeed/blob/master/blogs/huggingface-tp/README.md

@@ -143,3 +143,24 @@ def generate_samples(model, cfg, n=4, temperature=1.0, top_k=None, save_path=Non
             print(f"Saved eval images to {save_path}")
         else:
             plt.show()
+
+
+
+def get_flops():
+    # peak fp16 flops for GPUs we're using (for mfu calculation)
+    PEAK_FLOPS = {
+        # dense referene values, with sparsity they are ~double
+        "NVIDIA RTX A4000": 19.1e12,
+        "NVIDIA RTX A5000": 27.8e12, 
+        "NVIDIA RTX 5090": 104e12,
+        "NVIDIA A100": 312e12,
+        "NVIDIA H100": 989e12,
+        "NVIDIA H200": 989e12,
+        "NVIDIA B200": 2250e12,
+    }
+    import torch
+    gpu_name = torch.cuda.get_device_name(0)
+    for key in PEAK_FLOPS:
+        if key in gpu_name:
+            return PEAK_FLOPS[key]
+    return None  # unknown GPU
