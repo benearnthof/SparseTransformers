@@ -45,6 +45,7 @@ dtype: bfloat16 # if torch.cuda.is_available() and torch.cuda.is_bf16_supported(
 compile: True # use PyTorch 2.0 to compile the model to be faster
 
 # DeepSpeed Config for ZeRO and CPU offloading
+pipeline_parallel_stages: 2
 use_deepspeed: True
 deepspeed:
   steps_per_print: 100 # Print progress report every N training steps. Default: 10
@@ -87,5 +88,5 @@ deepspeed:
     enabled: False # Enables flops profiler, also enables wall_clock_breakdown.
     profile_step: 25 # The global training step at which to profile. Warm up steps are needed for accurate time measurement. Default: 1
     output_file: null # path to output file, if null the profiler prints to stdout
-  tensor_parallel:
-    autotp_size: 2 # does this work? https://github.com/deepspeedai/DeepSpeed/blob/master/blogs/huggingface-tp/README.md
+  # tensor_parallel: # TODO: Try this with modern cards, if autotp doesn't work we need to adjust modules and do this manually
+  #   tp_size: 2 # does this work? https://github.com/deepspeedai/DeepSpeed/blob/master/blogs/huggingface-tp/README.md

@@ -16,10 +16,12 @@ from collections import OrderedDict
 from contextlib import nullcontext
 
 import torch
+import deepspeed
 
 from modules.dense import GPT, GPTConfig
 from utils import get_batch, generate_samples 
 
+deepspeed.init_distributed() 
 # TODO: pass this as commandline argument
 cfg = OmegaConf.load(r"./config/DeepSpeed-16.yaml")
 
