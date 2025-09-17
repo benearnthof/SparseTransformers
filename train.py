@@ -1,4 +1,3 @@
-# TODO: split up DeepSpeed training into separate file
 import random
 random.seed(1) # set a seed so that the results are consistent
 import os
@@ -17,7 +16,6 @@ from contextlib import nullcontext
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
-from torch.distributed.optim import ZeroRedundancyOptimizer
 
 from modules.vanilla import GPT, GPTConfig
 from utils import get_batch, generate_samples 
