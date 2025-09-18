@@ -11,6 +11,7 @@ from torch.nn import functional as F
 from utils import get_flops
 
 import deepspeed
+from deepspeed.runtime.progressive_layer_drop import ProgressiveLayerDrop
 
 # TODO: Gradient Remat / Activation Checkpointing via DeepSpeed
 
@@ -103,10 +104,27 @@ class Block(nn.Module):
         self.mlp = MLP(config)
         self.config = config
 
-    def forward(self, x):
-        # Standard forward pass
-        x = x + self.attn(self.ln_1(x))
-        x = x + self.mlp(self.ln_2(x))
+    def forward(self, x, p_i=None):
+        """
+        p_i: scalar keep-probability in (0,1], or None to disable PLD for this block.
+        Behaviour:
+          - if p_i is None or model is in eval mode => standard block
+          - else: sample G ~ Bernoulli(p_i) using device-safe random and apply scaling by 1/p_i
+        """
+        if p_i is None or not self.training:
+            # Standard transformer block
+            x = x + self.attn(self.ln_1(x))
+            x = x + self.mlp(self.ln_2(x))
+            return x
+        device = x.device
+        keep = (torch.rand((), device=device) < p_i).to(x.dtype) 
+         # Progressive Layer Dropping: Section 4.1 in https://arxiv.org/pdf/2010.13369
+        if keep.item() == 0.0:
+            # skip entire sublayer, return x unchanged
+            return x
+
+        x = x + self.attn(self.ln_1(x)) / p_i
+        x = x + self.mlp(self.ln_2(x)) / p_i
         return x
 
 @dataclass
@@ -121,6 +139,9 @@ class GPTConfig:
     attn_dropout: float = 0.1
     resid_dropout: float = 0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    progressive_layer_drop: bool = False
+    pld_theta: float = 0.5
+    pld_gamma: float = 0.001
 
 class GPT(nn.Module):
 
@@ -129,6 +150,11 @@ class GPT(nn.Module):
         assert config.vocab_size is not None
         assert config.block_size is not None
         self.config = config
+        if config.progressive_layer_drop:
+            self.progressive_layer_drop = ProgressiveLayerDrop(
+                theta=config.pld_theta,
+                gamma=config.pld_gamma,
+            )
 
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
@@ -151,6 +177,18 @@ class GPT(nn.Module):
 
         # report number of parameters
         print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))
+
+    def get_layer_prob(self, layer_idx: int, global_step: int):
+        """
+        Per-Layer  keep probability p_i as defined in Section 4.2: Distributing along the depth dimension in https://arxiv.org/pdf/2010.13369
+        Using DeepSpeed scheduler initialized during model_engine init with args from config.
+        """
+        assert hasattr(self, "progressive_layer_drop"), "ProgressiveLayerDrop not configured for model."
+        self.progressive_layer_drop.update_state(global_step)
+        theta_t = self.progressive_layer_drop.get_theta()
+        print(f"Step:{global_step}; Theta:{theta_t}")
+        p_i = (layer_idx + 1) / self.config.n_layer * theta_t
+        return min(max(p_i, 1e-6), 1.0)
 
     def get_num_params(self, non_embedding=True):
         """
@@ -186,7 +224,17 @@ class GPT(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
 
 
-    def forward(self, idx, targets=None):
+    def forward(self, idx, targets=None, global_step=None, **kwargs):
+        # TODO clean this up, maybe with flag: inference mode or something
+        if global_step is None: # for deepspeed shenanigans
+            global_step = kwargs.get("global_step", None)
+        print(f"Step:{global_step}")
+        # if global_step is None and hasattr(self, "_deepspeed_engine"):
+        #     try:
+        #         global_step = int(self._deepspeed_engine.global_steps)
+        #     except Exception:
+        #         global_step = None
+
         device = idx.device
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
@@ -204,8 +252,12 @@ class GPT(nn.Module):
         # initialization has been adjusted so summing should be fine
         x = self.transformer.drop(tok_emb + row_emb + col_emb + chan_emb)
         
-        for block in self.transformer.h:
-            x = block(x)
+        for i, block in enumerate(self.transformer.h):
+            p_i = None
+            if hasattr(self, "progressive_layer_drop" ) and global_step is not None:
+                p_i = self.get_layer_prob(i, global_step) # num_layers in config
+            #print(f"layer={i}, p_i={p_i}, is_training_call={is_training_call}, global_step={global_step}")
+            x = block(x, p_i=p_i)
 
         x = self.transformer.ln_f(x)
 
