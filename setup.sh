@@ -35,5 +35,5 @@ export NCCL_DEBUG=INFO
 
 nvidia-smi topo -m
 
-torchrun --nproc_per_node=2 train_deepspeed.py
+torchrun --nproc_per_node=1 train_deepspeed.py
 

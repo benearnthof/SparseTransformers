@@ -3,7 +3,7 @@
 # very overkill config for a 59M parameter baseline. 
 debug_memory: True
 out_dir: out
-eval_interval: 300
+eval_interval: 500
 log_interval: 10
 eval_iters: 10
 eval_imgs: 1 # number of images generated during eval
@@ -12,7 +12,7 @@ always_save_checkpoint: True # if True, always save a checkpoint after each eval
 ckpt_path: Null #"/root/SparseTransformers/out/DeepSpeed-16-1GPU_ds_ckpt" # if ckpt_path is not None we load from checkpoint
 
 # wandb logging
-wandb_log: False # disabled by default
+wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
 wandb_run_name: 'DeepSpeed-16-1GPU-PLD' # 'run' + str(time.time())
 
@@ -48,16 +48,16 @@ compile: True # use PyTorch 2.0 to compile the model to be faster
 pipeline_parallel_stages: 2
 use_deepspeed: True
 deepspeed:
-  steps_per_print: 100 # Print progress report every N training steps. Default: 10
+  steps_per_print: 500 # Print progress report every N training steps. Default: 10
   wall_clock_breakdown: False # Enable timing of the latency of forward/backward/update training phases. Default: False
   train_batch_size: 16 # must be equal to train_micro_batch_size * gradient_accumulation_steps * number of GPUs
   gradient_accumulation_steps: 1 # we provide train_batch_size and gradient_accumulation_steps, number of GPUs is given and micro_batch_size is inferred automatically
   scheduler: # WarmupCosineLR
     type: WarmupCosineLR
     params:
-      total_num_steps: 1500 # total number of training steps
+      total_num_steps: 5000 # total number of training steps
       warmup_min_ratio: 0.000035 # warmup start learning rate, should be ~ learning_rate/10 per Chinchilla
-      warmup_num_steps: 300 # number of steps to warm up for
+      warmup_num_steps: 500 # number of steps to warm up for
       warmup_type: linear # either log or linear warmup
   zero_optimization:
     stage: 1 # [0, 1, 2, 3] refers to disabled, optimizer state partitioning, + gradient state partitioning, + parameter partitioning, respectively
@@ -85,8 +85,8 @@ deepspeed:
       weight_decay: 0.01 # might have to decrease this for larger datasets https://www.arxiv.org/pdf/2405.13698
       eps: 1e-8
   progressive_layer_drop: # https://www.deepspeed.ai/tutorials/progressive_layer_dropping/
-    enabled: True
-    theta: 0.5
+    enabled: False
+    theta: 0.9
     gamma: 0.001
   flops_profiler:
     enabled: False # Enables flops profiler, also enables wall_clock_breakdown.

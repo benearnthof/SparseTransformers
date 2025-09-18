@@ -103,15 +103,11 @@ else:
     print("Training from scratch.")
     checkpoint = None
 
-# backwards compatibility & deepspeed
-def forward_model(X, Y):
-    # TODO: remove this 
-    # print(f"Called forward with step: {model_engine.global_steps}")
-    return model_engine(X, Y, global_step=model_engine.global_steps)
 
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()
 def estimate_loss():
+    # TODO when we're layer dropping this is broken for some reason
     out = {}
     model_eval_target = raw_model  # raw_model already points to engine.module for DS
     model_eval_target.eval()
@@ -120,7 +116,7 @@ def estimate_loss():
         for k in range(cfg.eval_iters):
             X, Y = get_batch(split, cfg)
             with ctx:
-                logits, loss = forward_model(X, Y)
+                logits, loss = model_eval_target(X, Y, global_step=None)
             losses[k] = loss.item()
         out[split] = losses.mean()
     model_eval_target.train()
@@ -139,7 +135,7 @@ if cfg.debug_memory:
     torch.cuda.memory._record_memory_history(max_entries=100000)
     for _ in range(2):
         with ctx:
-            logits, loss = forward_model(X, Y)
+            logits, loss = model_engine(X, Y)
         # DS handles scaling and backward
         model_engine.backward(loss)
         # clip + step handled below as appropriate for DS; but for the micro-run we call step then zero
@@ -176,6 +172,7 @@ while True:
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         img_path = f"eval_{iter_num}.jpg"
         # TODO: change split to eval for actual training runs
+        # TODO: update generate_samples function to do predictions without layer dropping
         generate_samples(raw_model, n=cfg.eval_imgs, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
         theta = 0
         if hasattr(model_engine.module, "progressive_layer_drop"):
@@ -211,7 +208,7 @@ while True:
 
     # forward backward update, gradient accumulation is handled by DeepSpeed
     with ctx:
-        logits, loss = forward_model(X, Y)
+        logits, loss = model_engine(X, Y, global_step=iter_num)
     # immediately async prefetch next batch while model is doing the forward pass on the GPU
     X, Y = get_batch('train', cfg)
     # backward

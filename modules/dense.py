@@ -111,14 +111,15 @@ class Block(nn.Module):
           - if p_i is None or model is in eval mode => standard block
           - else: sample G ~ Bernoulli(p_i) using device-safe random and apply scaling by 1/p_i
         """
-        if p_i is None or not self.training:
+        # TODO: set flag for inference here
+        if p_i is None: # or not self.training:
             # Standard transformer block
             x = x + self.attn(self.ln_1(x))
             x = x + self.mlp(self.ln_2(x))
             return x
         device = x.device
         keep = (torch.rand((), device=device) < p_i).to(x.dtype) 
-         # Progressive Layer Dropping: Section 4.1 in https://arxiv.org/pdf/2010.13369
+        # Progressive Layer Dropping: Section 4.1 in https://arxiv.org/pdf/2010.13369
         if keep.item() == 0.0:
             # skip entire sublayer, return x unchanged
             return x
@@ -186,7 +187,7 @@ class GPT(nn.Module):
         assert hasattr(self, "progressive_layer_drop"), "ProgressiveLayerDrop not configured for model."
         self.progressive_layer_drop.update_state(global_step)
         theta_t = self.progressive_layer_drop.get_theta()
-        print(f"Step:{global_step}; Theta:{theta_t}")
+        # print(f"Step:{global_step}; Theta:{theta_t}")
         p_i = (layer_idx + 1) / self.config.n_layer * theta_t
         return min(max(p_i, 1e-6), 1.0)
 
@@ -225,15 +226,10 @@ class GPT(nn.Module):
 
 
     def forward(self, idx, targets=None, global_step=None, **kwargs):
-        # TODO clean this up, maybe with flag: inference mode or something
+        # TODO clean this up, maybe with flag: inference mode or something, & see if kwargs is needed still
         if global_step is None: # for deepspeed shenanigans
             global_step = kwargs.get("global_step", None)
-        print(f"Step:{global_step}")
-        # if global_step is None and hasattr(self, "_deepspeed_engine"):
-        #     try:
-        #         global_step = int(self._deepspeed_engine.global_steps)
-        #     except Exception:
-        #         global_step = None
+        # print(f"Global step in forward:{global_step}")
 
         device = idx.device
         b, t = idx.size()
@@ -254,7 +250,7 @@ class GPT(nn.Module):
         
         for i, block in enumerate(self.transformer.h):
             p_i = None
-            if hasattr(self, "progressive_layer_drop" ) and global_step is not None:
+            if hasattr(self, "progressive_layer_drop") and global_step is not None:
                 p_i = self.get_layer_prob(i, global_step) # num_layers in config
             #print(f"layer={i}, p_i={p_i}, is_training_call={is_training_call}, global_step={global_step}")
             x = block(x, p_i=p_i)
