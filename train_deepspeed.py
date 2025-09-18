@@ -67,6 +67,9 @@ model_args = dict(
     vocab_size=None,
     attn_dropout=cfg.attn_dropout,
     resid_dropout=cfg.resid_dropout,
+    progressive_layer_drop=cfg.deepspeed.progressive_layer_drop.enabled,
+    pld_theta=cfg.deepspeed.progressive_layer_drop.theta,
+    pld_gamma=cfg.deepspeed.progressive_layer_drop.gamma,
 ) # start with model_args from command line
 
 model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 256
@@ -103,7 +106,8 @@ else:
 # backwards compatibility & deepspeed
 def forward_model(X, Y):
     # TODO: remove this 
-    return model_engine(X, Y)
+    # print(f"Called forward with step: {model_engine.global_steps}")
+    return model_engine(X, Y, global_step=model_engine.global_steps)
 
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()
@@ -173,6 +177,9 @@ while True:
         img_path = f"eval_{iter_num}.jpg"
         # TODO: change split to eval for actual training runs
         generate_samples(raw_model, n=cfg.eval_imgs, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
+        theta = 0
+        if hasattr(model_engine.module, "progressive_layer_drop"):
+            theta = model_engine.module.progressive_layer_drop.get_theta()
         if cfg.wandb_log:
             wandb.log({
                 "iter": iter_num,
@@ -180,7 +187,8 @@ while True:
                 "val/loss": losses['val'],
                 "lr": model_engine.lr_scheduler.get_lr()[0],
                 "mfu": running_mfu*100, # convert to percentage
-                "eval_images": wandb.Image(img_path)
+                "eval_images": wandb.Image(img_path),
+                "pld_theta": theta,
             })
         if losses['val'] < best_val_loss or cfg.always_save_checkpoint:
             best_val_loss = losses['val']
