@@ -11,7 +11,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 ### Memory profiling & Performance
 #### Features
 * Selective Activation Checkpointing to decrease GPU memory requirements for very deep transformers
-* Automatic mixed precision
+* Mixed Precision Training can be set to "fp16" or "bf16" via config
 * DDP Training via `torchrun --nproc_per_node=x train.py | tee ds_run.log`
 * DeepSpeed Training for the performance features listed below can be set in config
 * During evaluation masked images are sampled and logged on wandb with their respective predictions
@@ -26,30 +26,31 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
 * Investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
-* Custom Mixed precision training with torch.distributed.fsdp MixedPrecisionPolicy (Section 5.6 in paper, should help scale training across multiple nodes)
 * DeepSpeed Tensor Parallelism
 * DeepSpeed Pipeline Parallelism
 * Implement custom parallel models like picotron
-* Benchmark DeepSpeed settings
+* Benchmark DeepSpeed settings  
+* Figure out stable config for Progressive Layer Dropping
 * Investigate tradeoff between CPU-AdamW vs FusedAdamW vs OneBitAdam vs ZeroOneAdam; Investigate Lamb vs OnebitLamb
 
 ### Functionality
+* Pretrained models can be loaded from checkpoint
 * Parameters & Embeddings are initialized like specified in section 6 of the paper
 * Dropout is only applied at the end of each residual addition as per section 5.4 of the paper  
 * Pre-activation residual block of https://arxiv.org/pdf/1603.05027  
 * Feed-forward networks project to mlp_dim * d, with mlp_dim 4 as standard, mlp_dim 2 for "half-size" as outlined in section 7.1 for CIFAR-10  
 * Layer-dependent weight initialization
+* Progressive Layer Dropping can be enabled via config arguments
 ```python
 for pn, p in self.named_parameters():
     if pn.endswith('c_proj.weight'):
         torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
 ```
-* Pretrained models can be loaded from checkpoint
 
 #### TODO
 * Vanilla Implementation of DeepSpeed features
-* Gradient Clipping can be passed as config argument for DeepSpeed
-* Sparse Attention can be passed as config argument for DeepSpeed, after updating the nn modules accordingly: https://www.deepspeed.ai/tutorials/sparse-attention/
+* Gradient Clipping should be passed as config argument for DeepSpeed
+* Sparse Attention should be passed as config argument for DeepSpeed, after updating the nn modules accordingly: https://www.deepspeed.ai/tutorials/sparse-attention/
 * Curriculum learning & Random Layerwise Token Dropping for data efficiency https://www.deepspeed.ai/tutorials/data-efficiency/
 * Maybe do full picotron style implementation of 4D parallelism https://github.com/huggingface/picotron/tree/main
 * Visualize positional encodings to clarify what's going on  
@@ -59,7 +60,6 @@ for pn, p in self.named_parameters():
 * add other masking variants (bidirectional training should only require adding a couple lines of code)  
 * Data augmentation à la https://arxiv.org/abs/1909.13719  
 * Learning rate scaling with batch size https://arxiv.org/pdf/1706.02677  
-* Stochastic Depth https://arxiv.org/pdf/1603.09382  
 * Weight init with truncated Gaussian https://arxiv.org/pdf/1803.01719  
 * Try the GPT-2 style architecture from https://proceedings.mlr.press/v119/chen20s/chen20s.pdf
 * FP4 All the Way: Fully Quantized Training of LLMs https://arxiv.org/pdf/2505.19115  
@@ -92,6 +92,7 @@ https://deepspeed.readthedocs.io/en/latest/optimizers.html
 https://www.deepspeed.ai/tutorials/sparse-attention/  
 https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/  
 https://www.deepspeed.ai/tutorials/pipeline/
+https://arxiv.org/pdf/2010.13369 (Progressive Layer Dropping, a technique inspired by Stochastic Depth https://arxiv.org/pdf/1603.09382)
 
 ### On positional Encoding
 In addition to the embedding of input symbols, positional embeddings are typically used in Transformers and other location-agnostic architectures to encode the spatial relationships of data (Gehring et al., 2017), (Parmar et al., 2018).
