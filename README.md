@@ -16,7 +16,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * DeepSpeed Training for the performance features listed below can be set in config
 * During evaluation masked images are sampled and logged on wandb with their respective predictions
 * To avoid data leakage from image to image the last target byte y[-1] is set to the last input byte x[-1]  
-* Adjusted positional encodings for image data, see below.
+* Custom positional encodings for image data, see section below.
 * GPU memory profiling can be enabled with `debug_memory` in config.
 * To visualize the .pickle files this produces head over to [https://docs.pytorch.org/memory_viz](https://docs.pytorch.org/memory_viz)
 * Zero Redundancy Optimizers (1-3) are available via DeepSpeed Training  
@@ -25,12 +25,11 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 #### TODO
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
-* Investigate NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL may be required for some GPUs
+* Some GPUs may require NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL, write short script to determine settings
 * DeepSpeed Tensor Parallelism
-* DeepSpeed Pipeline Parallelism
+* DeepSpeed Pipeline Parallelism (Not compatible with ZeRO-2 and ZeRO-3)
 * Implement custom parallel models like picotron
 * Benchmark DeepSpeed settings  
-* Figure out stable config for Progressive Layer Dropping
 * Investigate tradeoff between CPU-AdamW vs FusedAdamW vs OneBitAdam vs ZeroOneAdam; Investigate Lamb vs OnebitLamb
 
 ### Functionality
