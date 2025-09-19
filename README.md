@@ -92,6 +92,7 @@ https://www.deepspeed.ai/tutorials/sparse-attention/
 https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/  
 https://www.deepspeed.ai/tutorials/pipeline/
 https://arxiv.org/pdf/2010.13369 (Progressive Layer Dropping, a technique inspired by Stochastic Depth https://arxiv.org/pdf/1603.09382)
+https://github.com/bigscience-workshop/Megatron-DeepSpeed really nice implementation of TensorParallelism with DeepSpeed
 
 ### On positional Encoding
 In addition to the embedding of input symbols, positional embeddings are typically used in Transformers and other location-agnostic architectures to encode the spatial relationships of data (Gehring et al., 2017), (Parmar et al., 2018).
