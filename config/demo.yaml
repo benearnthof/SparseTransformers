@@ -12,7 +12,7 @@ always_save_checkpoint: True # if True, always save a checkpoint after each eval
 ckpt_path: Null #"/root/SparseTransformers/out/DeepSpeed-16-1GPU_ds_ckpt" # if ckpt_path is not None we load from checkpoint
 
 # wandb logging
-wandb_log: True # disabled by default
+wandb_log: False # disabled by default
 wandb_project: 'sparse-transformer'
 wandb_run_name: 'PLD-0.5' # 'run' + str(time.time())
 
