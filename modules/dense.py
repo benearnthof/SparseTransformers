@@ -186,10 +186,13 @@ class GPT(nn.Module):
         """
         assert hasattr(self, "progressive_layer_drop"), "ProgressiveLayerDrop not configured for model."
         self.progressive_layer_drop.update_state(global_step)
-        theta_t = self.progressive_layer_drop.get_theta()
-        # print(f"Step:{global_step}; Theta:{theta_t}")
-        p_i = (layer_idx + 1) / self.config.n_layer * theta_t
-        return min(max(p_i, 1e-6), 1.0)
+        theta_t = self.progressive_layer_drop.get_theta()  # theta(t)
+        L = float(self.config.n_layer)
+        drop_fraction = (layer_idx + 1) / L * (1.0 - theta_t)
+        p_i = 1.0 - drop_fraction
+        # numerical safeguards, may need to set to 1e-3 if activations spike too much
+        p_i = float(min(max(p_i, 1e-6), 1.0))
+        return p_i
 
     def get_num_params(self, non_embedding=True):
         """

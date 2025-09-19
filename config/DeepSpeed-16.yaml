@@ -12,7 +12,7 @@ always_save_checkpoint: True # if True, always save a checkpoint after each eval
 ckpt_path: Null #"/root/SparseTransformers/out/DeepSpeed-16-1GPU_ds_ckpt" # if ckpt_path is not None we load from checkpoint
 
 # wandb logging
-wandb_log: True # disabled by default
+wandb_log: False # disabled by default
 wandb_project: 'sparse-transformer'
 wandb_run_name: 'DeepSpeed-16-1GPU-PLD' # 'run' + str(time.time())
 
@@ -25,7 +25,7 @@ block_size: 3072
 # model
 # For testing purposes
 n_layer: 16
-n_head: 2
+n_head: 4
 n_embd: 256
 # mlp_dim is multiplier: 2 => mlp_dimension = 2 * n_embed
 mlp_dim: 2 # half-size projection as per section 7 of the paper
@@ -85,9 +85,9 @@ deepspeed:
       weight_decay: 0.01 # might have to decrease this for larger datasets https://www.arxiv.org/pdf/2405.13698
       eps: 1e-8
   progressive_layer_drop: # https://www.deepspeed.ai/tutorials/progressive_layer_dropping/
-    enabled: False
-    theta: 0.9
-    gamma: 0.001
+    enabled: True
+    theta: 0.75
+    gamma: 0.02 # 100/total steps
   flops_profiler:
     enabled: False # Enables flops profiler, also enables wall_clock_breakdown.
     profile_step: 25 # The global training step at which to profile. Warm up steps are needed for accurate time measurement. Default: 1

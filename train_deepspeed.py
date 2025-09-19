@@ -106,7 +106,7 @@ else:
 
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()
-def estimate_loss():
+def estimate_loss(step:int=None):
     # TODO when we're layer dropping this is broken for some reason
     out = {}
     model_eval_target = raw_model  # raw_model already points to engine.module for DS
@@ -116,7 +116,7 @@ def estimate_loss():
         for k in range(cfg.eval_iters):
             X, Y = get_batch(split, cfg)
             with ctx:
-                logits, loss = model_eval_target(X, Y, global_step=None)
+                logits, loss = model_eval_target(X, Y, global_step=step)
             losses[k] = loss.item()
         out[split] = losses.mean()
     model_eval_target.train()
@@ -168,7 +168,7 @@ if cfg.wandb_log and master_process:
 while True:
     # evaluation & checkpointing
     if iter_num % cfg.eval_interval == 0 and master_process:
-        losses = estimate_loss()
+        losses = estimate_loss(step=iter_num)
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         img_path = f"eval_{iter_num}.jpg"
         # TODO: change split to eval for actual training runs
