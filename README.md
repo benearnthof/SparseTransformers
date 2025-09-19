@@ -23,6 +23,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 
 
 #### TODO
+* Remove hardcoded paths from utils & train script
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
 * Some GPUs may require NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL, write short script to determine settings
