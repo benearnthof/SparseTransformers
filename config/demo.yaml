@@ -1,0 +1,96 @@
+# hyperparameters
+# I/O
+# very overkill config for a 59M parameter baseline. 
+debug_memory: True
+out_dir: out
+eval_interval: 500
+log_interval: 10
+eval_iters: 10
+eval_imgs: 1 # number of images generated during eval
+eval_only: False # if True, script exits right after the first eval
+always_save_checkpoint: True # if True, always save a checkpoint after each eval
+ckpt_path: Null #"/root/SparseTransformers/out/DeepSpeed-16-1GPU_ds_ckpt" # if ckpt_path is not None we load from checkpoint
+
+# wandb logging
+wandb_log: True # disabled by default
+wandb_project: 'sparse-transformer'
+wandb_run_name: 'PLD-0.5' # 'run' + str(time.time())
+
+# data
+dataset: 'cifar-10'
+overfit: True
+batch_size: 4 # if gradient_accumulation_steps > 1, this is the micro-batch size
+block_size: 3072
+
+# model
+# For testing purposes
+n_layer: 16
+n_head: 4
+n_embd: 256
+# mlp_dim is multiplier: 2 => mlp_dimension = 2 * n_embed
+mlp_dim: 2 # half-size projection as per section 7 of the paper
+# kq_dim is the explicit dimension of query and key linear projections
+qk_dim: 128 # half-size projection for queries and keys as per section 7
+attn_dropout: 0 # we do not apply dropout within the attention blocks [...] and instead
+resid_dropout: 0.05 # only apply it at the end of each residual addition
+bias: False # do we use bias inside LayerNorm and Linear layers?
+
+# gradient clipping as specified in paper
+grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
+# DDP settings
+backend: nccl # 'nccl', 'gloo', etc.
+# System settings
+device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
+dtype: bfloat16 # if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
+compile: True # use PyTorch 2.0 to compile the model to be faster
+
+# DeepSpeed Config for ZeRO and CPU offloading
+pipeline_parallel_stages: 2
+use_deepspeed: True
+deepspeed:
+  steps_per_print: 500 # Print progress report every N training steps. Default: 10
+  wall_clock_breakdown: False # Enable timing of the latency of forward/backward/update training phases. Default: False
+  train_batch_size: 16 # must be equal to train_micro_batch_size * gradient_accumulation_steps * number of GPUs
+  gradient_accumulation_steps: 1 # we provide train_batch_size and gradient_accumulation_steps, number of GPUs is given and micro_batch_size is inferred automatically
+  scheduler: # WarmupCosineLR
+    type: WarmupCosineLR
+    params:
+      total_num_steps: 2500 # total number of training steps
+      warmup_min_ratio: 0.000035 # warmup start learning rate, should be ~ learning_rate/10 per Chinchilla
+      warmup_num_steps: 500 # number of steps to warm up for
+      warmup_type: linear # either log or linear warmup
+  zero_optimization:
+    stage: 1 # [0, 1, 2, 3] refers to disabled, optimizer state partitioning, + gradient state partitioning, + parameter partitioning, respectively
+    allgather_partitions: True # allgather collective vs broadcast collective to gather updated parameters
+    allgather_bucket_size: 5e8 # number of elements allgathered at a time. Default  5e8
+    overlap_comm: True # Attempts to overlap communication with backward computation. Default: False
+    reduce_scatter: True # Uses reduce or reduce scatter instead of allreduce to average gradients. Default: True
+    reduce_bucket_size: 5e8 # Number of elements reduced/allreduced at a time. Limits memory required for allgather for large models. Default 5e8
+    contiguous_gradients: True # Avoids memory fragmentation during backward pass
+    load_from_fp32_weights: True # Init fp32 master weights from fp32 copies in checkpoint. Default: True
+    round_robin_gradients: False # Stage 1 and 2 optimization for CPU offloading. Benefit grows with grad accumulation steps. Default: False
+    # offload_optimizer: # valid for stage 1, 2, 3. Offloading optimizer state to CPU or NVMe, optimizer computation on CPU. Parameter offloading is only valid for Stage 3, which we do not use.
+    #   device: cpu
+    #   pin_memory: True # offload to page-locked CPU memory. Can boost throughput at the cost of memory overhead. Default: False
+    #   ratio: 1 # Ratio of parameters updating on CPU side. Default: 1
+  zero_quantized_weights: False # Indicates whether to enable communication efficient quantized weights of ZeRO++. Default: False
+  zero_quantized_gradients: False # Indicates whether to enable communication efficient quantized gradients of ZeRO++. Default: False
+  bf16: # we stick to bfloat16 since our hardware supports it
+    enabled: True
+  optimizer:
+    type: AdamW # CPU optimizers: Adam, AdamW; GPU optimizers: FusedAdam/W, FusedLamb, OneBitAdam, ZeroOneAdam, OnebitLamb https://deepspeed.readthedocs.io/en/latest/optimizers.html
+    params:
+      lr: 0.00035
+      betas: [0.95, 0.95] # https://arxiv.org/pdf/2505.21829 argues that the choice of equal betas yields robust training for a wide spectrum of settings
+      weight_decay: 0.01 # might have to decrease this for larger datasets https://www.arxiv.org/pdf/2405.13698
+      eps: 1e-8
+  progressive_layer_drop: # https://www.deepspeed.ai/tutorials/progressive_layer_dropping/
+    enabled: True
+    theta: 0.5
+    gamma: 0.001 # 100/total steps
+  flops_profiler:
+    enabled: False # Enables flops profiler, also enables wall_clock_breakdown.
+    profile_step: 25 # The global training step at which to profile. Warm up steps are needed for accurate time measurement. Default: 1
+    output_file: null # path to output file, if null the profiler prints to stdout
+  # tensor_parallel: # TODO: Try this with modern cards, if autotp doesn't work we need to adjust modules and do this manually
+  #   tp_size: 2 # does this work? https://github.com/deepspeedai/DeepSpeed/blob/master/blogs/huggingface-tp/README.md
