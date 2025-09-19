@@ -18,12 +18,12 @@ from contextlib import nullcontext
 import torch
 import deepspeed
 
-from modules.dense import GPT, GPTConfig
+from modules.dense_pipeline import GPT, GPTConfig
 from utils import get_batch, generate_samples 
 
 deepspeed.init_distributed() 
 # TODO: pass this as commandline argument
-cfg = OmegaConf.load(r"./config/DeepSpeed-16.yaml")
+cfg = OmegaConf.load(r"./config/DS-Pipeline-16.yaml")
 
 # dump deepspeed config to file
 with open("ds_config.json", "w") as f:
@@ -70,6 +70,7 @@ model_args = dict(
     progressive_layer_drop=cfg.deepspeed.progressive_layer_drop.enabled,
     pld_theta=cfg.deepspeed.progressive_layer_drop.theta,
     pld_gamma=cfg.deepspeed.progressive_layer_drop.gamma,
+    pipeline_parallel_stages=cfg.pipeline_parallel_stages,
 ) # start with model_args from command line
 
 model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 256

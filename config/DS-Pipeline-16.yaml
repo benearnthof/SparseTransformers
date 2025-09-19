@@ -59,7 +59,7 @@ deepspeed:
       warmup_min_ratio: 0.000035 # warmup start learning rate, should be ~ learning_rate/10 per Chinchilla
       warmup_num_steps: 500 # number of steps to warm up for
       warmup_type: linear # either log or linear warmup
-  zero_optimization:
+  zero_optimization: # Pipeline Parallelism is not compatible with ZeRO-2 and ZeRO-3
     stage: 1 # [0, 1, 2, 3] refers to disabled, optimizer state partitioning, + gradient state partitioning, + parameter partitioning, respectively
     allgather_partitions: True # allgather collective vs broadcast collective to gather updated parameters
     allgather_bucket_size: 5e8 # number of elements allgathered at a time. Default  5e8
@@ -85,7 +85,7 @@ deepspeed:
       weight_decay: 0.01 # might have to decrease this for larger datasets https://www.arxiv.org/pdf/2405.13698
       eps: 1e-8
   progressive_layer_drop: # https://www.deepspeed.ai/tutorials/progressive_layer_dropping/
-    enabled: True
+    enabled: False
     theta: 0.5
     gamma: 0.001 # 100/total steps
   flops_profiler:
