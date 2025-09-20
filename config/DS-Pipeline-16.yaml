@@ -14,7 +14,7 @@ ckpt_path: Null #"/root/SparseTransformers/out/DeepSpeed-16-1GPU_ds_ckpt" # if c
 # wandb logging
 wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
-wandb_run_name: 'PLD-0.5' # 'run' + str(time.time())
+wandb_run_name: 'Pipeline-2' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
@@ -44,9 +44,13 @@ device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on
 dtype: bfloat16 # if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 compile: True # use PyTorch 2.0 to compile the model to be faster
 
-# DeepSpeed Config for ZeRO and CPU offloading
+# DeepSpeed Config 
+use_deepspeed: True # TODO: deprecated
+# Pipeline parallel settings
 pipeline_parallel_stages: 2
-use_deepspeed: True
+pp_partition_method: "uniform"
+activation_checkpoint_interval: 0
+# ZeRO and CPU offloading
 deepspeed:
   steps_per_print: 500 # Print progress report every N training steps. Default: 10
   wall_clock_breakdown: False # Enable timing of the latency of forward/backward/update training phases. Default: False

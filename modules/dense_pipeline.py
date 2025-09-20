@@ -141,7 +141,7 @@ class Block(nn.Module):
         return x
 
 # Helper to init pipeline stages
-def _init_weights(self, module):
+def _init_weights(module):
     if isinstance(module, nn.Linear):
         torch.nn.init.normal_(module.weight, mean=0.0, std=0.125 / math.sqrt(module.in_features))
         if module.bias is not None:
@@ -277,56 +277,29 @@ class GPT(nn.Module):
                 theta=config.pld_theta,
                 gamma=config.pld_gamma,
             )
-        if self.config.pipeline_parallel_stages == 1:
-            self.transformer = nn.ModuleDict(dict(
-                wte = nn.Embedding(config.vocab_size, config.n_embd),
-                # positional encoding for CIFAR-10 images
-                row_emb = nn.Embedding(32, config.n_embd),  # 32 rows
-                col_emb = nn.Embedding(32, config.n_embd),  # 32 cols
-                chan_emb = nn.Embedding(3, config.n_embd),  # 3 channels (RGB)
-                drop = nn.Dropout(config.attn_dropout), # the paper does not specify if this is kept or removed, we keep it
-                h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
-                ln_f = LayerNorm(config.n_embd, bias=config.bias),
-            ))
-            self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-            # init all weights
-            self.apply(self._init_weights)
-            torch.nn.init.zeros_(self.lm_head.weight)
-            # apply special scaled init to the residual projections, per GPT-2 paper
-            for pn, p in self.named_parameters():
-                if pn.endswith('c_proj.weight'):
-                    torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
-        else:
-            self.transformer = self.build_gpt_pipeline(self.config)   
+
+        self.transformer = nn.ModuleDict(dict(
+            wte = nn.Embedding(config.vocab_size, config.n_embd),
+            # positional encoding for CIFAR-10 images
+            row_emb = nn.Embedding(32, config.n_embd),  # 32 rows
+            col_emb = nn.Embedding(32, config.n_embd),  # 32 cols
+            chan_emb = nn.Embedding(3, config.n_embd),  # 3 channels (RGB)
+            drop = nn.Dropout(config.attn_dropout), # the paper does not specify if this is kept or removed, we keep it
+            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
+            ln_f = LayerNorm(config.n_embd, bias=config.bias),
+        ))
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        # init all weights
+        self.apply(self._init_weights)
+        torch.nn.init.zeros_(self.lm_head.weight)
+        # apply special scaled init to the residual projections, per GPT-2 paper
+        for pn, p in self.named_parameters():
+            if pn.endswith('c_proj.weight'):
+                torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
         # report number of parameters
         print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))
 
-    def build_gpt_pipeline(self, config):
-        layers = []
-        # Stage 0: embeddings
-        layers.append(LayerSpec(EmbeddingStage, config))
-        # Stage 1: one LayerSpec per transformer block with layer_idx passed
-        for i in range(config.n_layer):
-            layers.append(
-                LayerSpec(
-                    TransformerStage,
-                    config,
-                    i,
-                    config.progressive_layer_drop,
-                    config.pld_theta,
-                    config.pld_gamma
-                )
-            )
-        # Final stage
-        layers.append(LayerSpec(FinalStage, config))
-        pipeline = PipelineModule(
-            layers=layers,
-            num_stages=config.pipeline_parallel_stages,
-            loss_fn=None,                 # FinalStage returns loss when targets present
-            partition_method="uniform",
-            seed_layers=True              # optional: use per-layer seeding for deterministic init across ranks
-        )
-        return pipeline
+
 
     def get_layer_prob(self, layer_idx: int, global_step: int):
         """
@@ -423,6 +396,7 @@ class GPT(nn.Module):
 
     def configure_model_engine(self, cfg):
         """
+        # TODO: move this to training file to streamline DeepSpeed integration.
         Configure and return model_engine and optimizer objects for DeepSpeed.
         """
         # start with all of the candidate parameters
@@ -490,22 +464,54 @@ class GPT(nn.Module):
 
         return idx
 
+# We split up PipelineParallelism into a separate module like in Megatron-DeepSpeed
+# https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/8387ae17c4704f6579f88a84500b535d19d7fbbf/megatron/model/gpt_model.py
 
+class GPTPipe(PipelineModule):
+    """
+    DeepSpeed Pipeline for Pipeline Parallel training.
+    """
+    def __init__(self, config):
+        self.specs = []
+        # Stage 0: embeddings
+        self.specs.append(LayerSpec(EmbeddingStage, config))
+        # Stage 1: one LayerSpec per transformer block with layer_idx passed
+        for i in range(config.n_layer):
+            self.specs.append(
+                LayerSpec(
+                    TransformerStage,
+                    config,
+                    i,
+                    config.progressive_layer_drop,
+                    config.pld_theta,
+                    config.pld_gamma
+                )
+            )
+        # Final stage
+        self.specs.append(LayerSpec(FinalStage, config))
+        # TODO: once we integrate other forms of parallelism we want fine grained control over the topology
+        # from deepspeed.runtime.pipe.topology import PipeModelDataParallelTopology
+        # topo = PipeModelDataParallelTopology(num_pp=mpu.get_pipeline_model_parallel_world_size(),
+        #                                     num_mp=mpu.get_tensor_model_parallel_world_size(),
+        #                                     num_dp=mpu.get_data_parallel_world_size())
 
-# Then we adjust the training script to roughly accommodate the following
-"""
-# init distributed
-deepspeed.init_distributed()
+        # caveat emptor: the current implementation of PP fails unless each stage has at least one
+        # transformer layer
+        super().__init__(
+            layers=self.specs,
+            loss_fn=None,
+            num_stages=config.pipeline_parallel_stages,
+            loss_fn=None,
+            partition_method=config.pp_partition_method, # TODO: type:transformer partitioning for better balancing
+            seed_layers=True,
+            activation_checkpoint_interval=config.activation_checkpoint_interval,
+            partition_method=partition_method)
 
-# config
-gptconf = GPTConfig(...)
-
-# build pipeline model
-model = build_gpt_pipeline(gptconf)
-
-# initialize with DeepSpeed
-engine, optimizer, _, _ = deepspeed.initialize(
-    model=model,
-    model_parameters=[p for p in model.parameters()],
-    config="ds_config.json"
-)"""
+    pipeline = PipelineModule(
+        layers=layers,
+        num_stages=config.pipeline_parallel_stages,
+        loss_fn=None,                 # FinalStage returns loss when targets present
+        partition_method="uniform",   # TODO: type:transformer partitioning for better balancing
+        seed_layers=True              # optional: use per-layer seeding for deterministic init across ranks
+    )
+    return pipeline

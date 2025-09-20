@@ -33,6 +33,7 @@ def print_peak_memory(prefix, device):
     if device == 0:
         print(f"{prefix}: {torch.cuda.max_memory_allocated(device) // 1e6}MB ")
 
+# TODO: only one master_process
 master_process = True
 seed_offset = 0
 

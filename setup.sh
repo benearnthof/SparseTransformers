@@ -29,11 +29,14 @@ wandb init
 # make sure to export these on new GPU nodes
 export DEEPSPEED_COMM_BACKEND=nccl
 export NCCL_DEBUG=INFO
+# for A5000 GPUs
+export NCCL_P2P_DISABLE=1
+export NCCL_P2P_LEVEL=NVL
 # export NCCL_SOCKET_IFNAME=ens1
 # export NCCL_P2P_LEVEL=SYS
 # # for multinode? 
 
 nvidia-smi topo -m
 
-torchrun --nproc_per_node=1 train_deepspeed.py
+torchrun --nproc_per_node=2 train_deepspeed.py
 
