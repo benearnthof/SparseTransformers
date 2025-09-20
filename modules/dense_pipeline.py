@@ -263,7 +263,9 @@ class GPTConfig:
     progressive_layer_drop: bool = False
     pld_theta: float = 0.5
     pld_gamma: float = 0.001
-    pipeline_parallel_stages: int = 1
+    pipeline_parallel_stages: int = 2
+    pp_partition_method: str = "uniform"
+    pp_activation_checkpoint_interval: int = 0
 
 class GPT(nn.Module):
 
@@ -501,17 +503,6 @@ class GPTPipe(PipelineModule):
             layers=self.specs,
             loss_fn=None,
             num_stages=config.pipeline_parallel_stages,
-            loss_fn=None,
             partition_method=config.pp_partition_method, # TODO: type:transformer partitioning for better balancing
             seed_layers=True,
-            activation_checkpoint_interval=config.activation_checkpoint_interval,
-            partition_method=partition_method)
-
-    pipeline = PipelineModule(
-        layers=layers,
-        num_stages=config.pipeline_parallel_stages,
-        loss_fn=None,                 # FinalStage returns loss when targets present
-        partition_method="uniform",   # TODO: type:transformer partitioning for better balancing
-        seed_layers=True              # optional: use per-layer seeding for deterministic init across ranks
-    )
-    return pipeline
+            activation_checkpoint_interval=config.pp_activation_checkpoint_interval)

@@ -12,7 +12,7 @@ always_save_checkpoint: True # if True, always save a checkpoint after each eval
 ckpt_path: Null #"/root/SparseTransformers/out/DeepSpeed-16-1GPU_ds_ckpt" # if ckpt_path is not None we load from checkpoint
 
 # wandb logging
-wandb_log: True # disabled by default
+wandb_log: False # disabled by default
 wandb_project: 'sparse-transformer'
 wandb_run_name: 'Pipeline-2' # 'run' + str(time.time())
 
@@ -46,16 +46,16 @@ compile: True # use PyTorch 2.0 to compile the model to be faster
 
 # DeepSpeed Config 
 use_deepspeed: True # TODO: deprecated
-# Pipeline parallel settings
-pipeline_parallel_stages: 2
-pp_partition_method: "uniform"
-activation_checkpoint_interval: 0
-# ZeRO and CPU offloading
 deepspeed:
   steps_per_print: 500 # Print progress report every N training steps. Default: 10
   wall_clock_breakdown: False # Enable timing of the latency of forward/backward/update training phases. Default: False
   train_batch_size: 16 # must be equal to train_micro_batch_size * gradient_accumulation_steps * number of GPUs
   gradient_accumulation_steps: 1 # we provide train_batch_size and gradient_accumulation_steps, number of GPUs is given and micro_batch_size is inferred automatically
+  # Pipeline parallel settings
+  pipeline_parallel_stages: 2
+  pp_partition_method: "uniform"
+  pp_activation_checkpoint_interval: 0
+  # Scheduler
   scheduler: # WarmupCosineLR
     type: WarmupCosineLR
     params:
@@ -63,8 +63,9 @@ deepspeed:
       warmup_min_ratio: 0.000035 # warmup start learning rate, should be ~ learning_rate/10 per Chinchilla
       warmup_num_steps: 500 # number of steps to warm up for
       warmup_type: linear # either log or linear warmup
+  # ZeRO
   zero_optimization: # Pipeline Parallelism is not compatible with ZeRO-2 and ZeRO-3
-    stage: 1 # [0, 1, 2, 3] refers to disabled, optimizer state partitioning, + gradient state partitioning, + parameter partitioning, respectively
+    stage: 0 # [0, 1, 2, 3] refers to disabled, optimizer state partitioning, + gradient state partitioning, + parameter partitioning, respectively
     allgather_partitions: True # allgather collective vs broadcast collective to gather updated parameters
     allgather_bucket_size: 5e8 # number of elements allgathered at a time. Default  5e8
     overlap_comm: True # Attempts to overlap communication with backward computation. Default: False
