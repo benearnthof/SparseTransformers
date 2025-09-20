@@ -23,6 +23,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 
 
 #### TODO
+* Remove superfluous code from dense_pipeliny.py
 * Write proper dataloader for Pipeline Parallel training
 * Update generate_samples function for Pipeline Parallel
 * Update mfu function for Pipeline Parallel 

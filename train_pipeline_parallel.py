@@ -17,12 +17,16 @@ from contextlib import nullcontext
 
 import torch
 import deepspeed
+from torch.utils.data import DataLoader
+from deepspeed.utils import RepeatingLoader
 
+from data.memmapdataset import MemmapIterableDataset
 from modules.dense_pipeline import GPT, GPTConfig, GPTPipe
-from utils import get_batch, generate_samples 
+# TODO: rework these two utils to work with DeepSpeed Pipeline
+from utils import get_batch, generate_samples, generate_samples_pipe 
 
 # os.environ["WORLD_SIZE"] = "2"
-deepspeed.init_distributed() 
+deepspeed.init_distributed()
 # TODO: pass this as commandline argument
 cfg = OmegaConf.load(r"./config/DS-Pipeline-16.yaml")
 
@@ -57,6 +61,7 @@ iter_num = 0
 best_val_loss = 1e9
 meta_vocab_size = 256
 
+# TODO: join model args from config and commandline
 model_args = dict(
     n_layer=cfg.n_layer,
     n_head=cfg.n_head,
@@ -74,12 +79,21 @@ model_args = dict(
     pipeline_parallel_stages=cfg.deepspeed.pipeline_parallel_stages,
     pp_partition_method=cfg.deepspeed.pp_partition_method,
     pp_activation_checkpoint_interval=cfg.deepspeed.pp_activation_checkpoint_interval,
-) # start with model_args from command line
+) 
 
 model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 256
 gptconf = GPTConfig(**model_args)
 
 print(gptconf)
+
+# pipeline expects iterators
+train_ds = MemmapIterableDataset(cfg, split="train")
+train_loader = DataLoader(train_ds, batch_size=None, num_workers=4, pin_memory=True)
+train_repl = RepeatingLoader(train_loader)
+train_iter = iter(train_repl)
+
+val_ds = MemmapIterableDataset(cfg, split="val")
+val_loader = DataLoader(train_ds, batch_size=None, num_workers=4, pin_memory=True)
 
 # build pipeline model
 model = GPTPipe(gptconf)
@@ -116,47 +130,55 @@ else:
 
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()
-def estimate_loss(step:int=None):
+def estimate_loss(step: int = None):
     out = {}
-    model_engine.eval()  # engine -> evaluation mode across stages
-    for split in ['train','val']:
-        losses = torch.zeros(cfg.eval_iters, device=model_engine.device)
+    model_engine.eval()  # switch engine to eval mode (all stages)
+    for split in ["train", "val"]:
+        ds = MemmapIterableDataset(cfg, split=split)
+        dl = DataLoader(ds, batch_size=None, num_workers=2, pin_memory=True)
+        it = iter(dl)
+        losses = []
+
         for k in range(cfg.eval_iters):
-            X, Y = get_batch(split, cfg)
-            X = X.to(model_engine.device); Y = Y.to(model_engine.device)
-            data = ((X, Y, step), {})
-            _, loss = model_engine.eval_batch(data)   # forward only; returns (outputs, loss)
-            losses[k] = loss.detach()
+            data = next(it) 
+            # forward only
+            _, loss = model_engine.eval_batch(data)
+            losses.append(loss.detach().float().cpu())
+
+        losses = torch.stack(losses)
         out[split] = losses.mean().item()
+
     model_engine.train()
     return out
 
 # training loop
-X, Y = get_batch('train', cfg) # fetch the very first batch
-device = model_engine.device
-X, Y = X.to(device), Y.to(device)
 t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
-# raw_model used for logging/generation/estimate_mfu:
 # TODO: raw_model is outdated, need version compatible with pipeline
 # raw_model = model_engine.module
 # running_mfu = -1.0
 
-
 # Debug memory snapshot passes
 if cfg.debug_memory:
     torch.cuda.memory._record_memory_history(max_entries=100000)
+    probe_ds = MemmapIterableDataset(cfg, split="train")
+    probe_dl = torch.utils.data.DataLoader(
+        probe_ds, batch_size=None, num_workers=0, pin_memory=True
+    )
+    data = next(iter(probe_dl))
     for _ in range(2):
         with ctx:
-            data = ((X, Y, iter_num), {})
+            # TODO: expects iterator, not data
             loss = model_engine.train_batch(data)
-    try:
-        torch.cuda.memory._dump_snapshot(
-            # TODO: update in case we do gradient remat/activation checkpointing
-            f"layers_{cfg.n_layer}_remat_{0}_batchsize_{cfg.batch_size}.pickle"
-        )
+    # Dump snapshot to disk
+    try: # TODO: update filenames for DeepSpeed
+        fname = f"layers_{cfg.n_layer}_remat_{0}_batchsize_{cfg.batch_size}.pickle"
+        if dist.get_rank() == 0:
+            torch.cuda.memory._dump_snapshot(fname)
+        print(f"[Memory Debug] Dumped CUDA snapshot to {fname}")
     except Exception as e:
-        print(f"Failed to capture memory snapshot {e}")
+        print(f"[Memory Debug] Failed to capture memory snapshot: {e}")
+
     torch.cuda.memory._record_memory_history(enabled=None)
 
 # logging
@@ -186,8 +208,9 @@ while True:
         # TODO: generate samples should use model_engine.eval_batch
         # generate_samples(raw_model.module, n=cfg.eval_imgs, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
         theta = 0
-        if hasattr(model_engine.module, "progressive_layer_drop"):
-            theta = model_engine.module.progressive_layer_drop.get_theta()
+        # TODO: port to pipeline
+        # if hasattr(model_engine.module, "progressive_layer_drop"):
+        #     theta = model_engine.module.progressive_layer_drop.get_theta()
         if cfg.wandb_log:
             wandb.log({
                 "iter": iter_num,
