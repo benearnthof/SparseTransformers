@@ -52,7 +52,7 @@ deepspeed:
   train_batch_size: 16 # must be equal to train_micro_batch_size * gradient_accumulation_steps * number of GPUs
   gradient_accumulation_steps: 1 # we provide train_batch_size and gradient_accumulation_steps, number of GPUs is given and micro_batch_size is inferred automatically
   # Pipeline parallel settings
-  pipeline_parallel_stages: 2
+  pipeline_parallel_stages: 1
   pp_partition_method: "uniform"
   pp_activation_checkpoint_interval: 0
   # Scheduler

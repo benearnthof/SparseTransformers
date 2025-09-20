@@ -38,5 +38,5 @@ export NCCL_P2P_LEVEL=NVL
 
 nvidia-smi topo -m
 
-torchrun --nproc_per_node=2 train_pipeline_parallel.py
+torchrun --nproc_per_node=1 train_pipeline_parallel.py
 

@@ -23,6 +23,9 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 
 
 #### TODO
+* Write proper dataloader for Pipeline Parallel training
+* Update generate_samples function for Pipeline Parallel
+* Update mfu function for Pipeline Parallel 
 * Remove hardcoded paths from utils & train script
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
