@@ -2,7 +2,6 @@
 Process Group Manager with torch.distributed
 shoutout to the boys and girls at huggingface for picotron
 https://github.com/huggingface/picotron/blob/main/picotron/process_group_manager.py
-I renamed the global `proces_group_manager` to PGM
 """
 
 import os
@@ -89,5 +88,5 @@ class ProcessGroupManager:
         return f"TP({self.tp_world_size})-CP({self.cp_world_size})-PP({self.pp_world_size})-DP({self.dp_world_size})-Rank({self.global_rank})"
 
 def setup_process_group_manager(tp_size, cp_size, pp_size, dp_size):
-    global PGM
-    PGM = ProcessGroupManager(tp_size, cp_size, pp_size, dp_size)
+    global process_group_manager
+    process_group_manager = ProcessGroupManager(tp_size, cp_size, pp_size, dp_size)
