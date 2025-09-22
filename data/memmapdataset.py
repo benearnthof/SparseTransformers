@@ -103,4 +103,4 @@ class CIFAR10Dataset(Dataset):
         y_seq[-1] = x_seq[-1]
         x = torch.from_numpy(x_seq)
         y = torch.from_numpy(y_seq)
-        return (x, y)
+        return x, y

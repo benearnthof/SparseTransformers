@@ -179,9 +179,9 @@ class EmbeddingStage(nn.Module):
         self.apply(init_fn)
 
     def forward(self, inputs):
-        print(inputs)
+        print(f"Embedding Inputs:{inputs}")
         # TODO: how to pass in global step for PLD? 
-        global_step=None
+        global_step = None
         idx, targets = inputs
         b, t = idx.size()
         device = idx.device

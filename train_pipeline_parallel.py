@@ -18,7 +18,8 @@ from contextlib import nullcontext
 import torch
 import deepspeed
 from torch.utils.data import DataLoader
-from deepspeed.utils import RepeatingLoader
+# from deepspeed.utils import 
+from deepspeed.runtime.dataloader import RepeatingLoader, DeepSpeedDataLoader
 
 from data.memmapdataset import CIFAR10Dataset
 from modules.dense_pipeline import GPT, GPTConfig, GPTPipe
@@ -134,6 +135,33 @@ step = 0
 k = 0
 split = "train"
 
+ds = CIFAR10Dataset(cfg, split=split)
+dl = DataLoader(ds, 4, pin_memory=True)
+it = iter(RepeatingLoader(dl))
+
+data = next(iter(dl))
+data[0] = data[0].to(model_engine.device)
+data[1] = data[1].to(model_engine.device)
+model_engine.module(data)
+
+loss = model_engine.eval_batch(it)  # iterator directly
+
+# Here they seup cifar10
+# https://github.com/deepspeedai/DeepSpeedExamples/blob/master/training/pipeline_parallelism/train.py
+# as a trainset for training
+# we need to pass in the loss function at the end of the pipeline module
+
+
+
+
+
+
+
+
+
+
+
+
 # TODO: we might need to use the deepspeed loss function interface for pipeline parallel
 # as otherwise inputs and targets get unpacked incorrectly.
 @torch.no_grad()
@@ -142,13 +170,21 @@ def estimate_loss(step: int = None):
     model_engine.eval()
     for split in ["train", "val"]:
         ds = CIFAR10Dataset(cfg, split=split)
-        # dl = DataLoader(ds, batch_size=model_engine.train_micro_batch_size_per_gpu(), pin_memory=True)
-        it = iter(RepeatingLoader(ds))
-        data = next(it)
+        dl = DataLoader(ds, 4, pin_memory=True)
+        it = iter(RepeatingLoader(dl))
+        # passing the data like this works, eval_batch & train_batch perform
+        # loss calculation at the end and do not pass targets around. 
+        # TODO: add loss calculation to GPTPipe, remove targets from pipeline steps
+        # TODO: to pass in global step we return nested tuples from dataloader ?  
+        data = next(iter(dl))
+        data[0] = data[0].to(model_engine.device)
+        data[1] = data[1].to(model_engine.device)
+        model_engine.module(data)
+
         losses = []
 
         for _ in range(cfg.eval_iters):
-            _, loss = model_engine.eval_batch(it)  # iterator directly
+            loss = model_engine.eval_batch(it)  # iterator directly
             losses.append(loss.detach().float().cpu())
 
         out[split] = torch.stack(losses).mean().item()
