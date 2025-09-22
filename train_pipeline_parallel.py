@@ -145,6 +145,7 @@ data[0] = data[0].to(model_engine.device)
 data[1] = data[1].to(model_engine.device)
 # updated since we only forward data
 data = data[0]
+
 model_engine.module(data)
 
 loss = model_engine.eval_batch(iter(training_loader))  # iterator directly

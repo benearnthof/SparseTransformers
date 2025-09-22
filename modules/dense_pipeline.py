@@ -188,7 +188,7 @@ class EmbeddingStage(nn.Module):
         self.apply(init_fn)
 
     def forward(self, inputs):
-        print(f"Embedding Inputs:{inputs}")
+        # print(f"Embedding Inputs:{inputs}")
         idx = inputs
         b, t = idx.size()
         device = idx.device
@@ -259,12 +259,26 @@ class FinalStage(nn.Module):
         torch.nn.init.zeros_(self.lm_head.weight)
 
     def forward(self, inputs):
+        # print(type(inputs)) # torch.Tensor
+        # b, block_size = inputs.shape
         x = inputs
         x = self.ln_f(x)
         logits = self.lm_head(x)
+        # print(logits.shape) # [4, 3072, 256]
         # loss calculation is performed by pipeline engine
-        return logits.view(-1, logits.size(-1)) # , targets.view(-1), ignore_index=-1
+        return logits #.view(-1, logits.size(-1)) # , targets.view(-1), ignore_index=-1
 
+class CustomCrossEntropyLoss(nn.Module):
+    def __init__(self, ignore_index=-1):
+        super().__init__()
+        self.ignore_index = ignore_index
+        
+    def forward(self, logits, targets):
+        # logits: [batch_size, seq_len, vocab_size]
+        # targets: [batch_size, seq_len]
+        logits_flat = logits.view(-1, logits.size(-1))
+        targets_flat = targets.view(-1)
+        return F.cross_entropy(logits_flat, targets_flat, ignore_index=self.ignore_index)
 
 @dataclass
 class GPTConfig:
@@ -519,7 +533,7 @@ class GPTPipe(PipelineModule):
         # transformer layer
         super().__init__(
             layers=self.specs,
-            loss_fn=torch.nn.CrossEntropyLoss(), #loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+            loss_fn=CustomCrossEntropyLoss(ignore_index=-1), #loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
             num_stages=config.pipeline_parallel_stages,
             partition_method=config.pp_partition_method, # TODO: type:transformer partitioning for better balancing
             seed_layers=True,
