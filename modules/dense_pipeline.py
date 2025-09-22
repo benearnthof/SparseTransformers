@@ -162,6 +162,10 @@ def _init_weights(module):
 
 # Pipeline Parallel in DeepSpeed requires us to split the transformer into stages, such 
 # that we can wrap them up in a list and pass it to the scheduler
+# TODO: arguments must be collected into a tuple: 
+# forward(self, inputs) ... then unpack them: idx, targets, global_step = inputs
+# at the end we must return another tuple: return (x, targets, global_step)
+# see here: https://www.deepspeed.ai/tutorials/pipeline/#inputs-and-outputs
 class EmbeddingStage(nn.Module):
     # To accommodate PLD we simply pass global_step from stage to stage
     def __init__(self, config, init_fn=_init_weights):
@@ -174,7 +178,11 @@ class EmbeddingStage(nn.Module):
         self.drop = nn.Dropout(config.attn_dropout)
         self.apply(init_fn)
 
-    def forward(self, idx, targets=None, global_step=None):
+    def forward(self, inputs):
+        print(inputs)
+        # TODO: how to pass in global step for PLD? 
+        global_step=None
+        idx, targets = inputs
         b, t = idx.size()
         device = idx.device
         H, W = 32, 32
@@ -188,7 +196,7 @@ class EmbeddingStage(nn.Module):
         chan_emb = self.chan_emb(chans)[None, :, :].expand(b, -1, -1)
         x = self.drop(tok_emb + row_emb + col_emb + chan_emb)
         # forward x along with targets/global_step for later stages
-        return x, targets, global_step
+        return (x, targets)
 
 class TransformerStage(nn.Module):
     def __init__(self, config, layer_idx, use_pld=False, pld_theta=None, pld_gamma=None, init_fn=_init_weights):
@@ -209,7 +217,10 @@ class TransformerStage(nn.Module):
             if pn.endswith('c_proj.weight'):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
 
-    def forward(self, x, targets=None, global_step=None):
+    def forward(self, inputs):
+        x, targets = inputs
+        # TODO: how to pass global step to pipeline forward?
+        global_step = None
         # compute p_i if PLD enabled and we have a global_step
         p_i = None
         if self.use_pld and (global_step is not None):
@@ -224,7 +235,7 @@ class TransformerStage(nn.Module):
         # if p_i is None, block will act normally
         x = self.block(x, p_i=p_i)
         # pass through tuple for next stage
-        return x, targets, global_step
+        return (x, targets)
 
 class FinalStage(nn.Module):
     def __init__(self, config, init_fn=_init_weights):
@@ -236,7 +247,8 @@ class FinalStage(nn.Module):
         # lm_head is zero init
         torch.nn.init.zeros_(self.lm_head.weight)
 
-    def forward(self, x, targets=None, global_step=None):
+    def forward(self, inputs):
+        x, targets = inputs
         x = self.ln_f(x)
         logits = self.lm_head(x)
         if targets is not None:

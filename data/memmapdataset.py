@@ -8,7 +8,7 @@ batch creation appropriately.
 import torch
 import numpy as np
 import os
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, Dataset
 
 # TODO: IO & Shuffling. For distributed training we may want to precompute index list per epoch
 # TODO: save RNG state for resuming from checkpoint
@@ -68,7 +68,39 @@ class MemmapIterableDataset(IterableDataset):
                 y_list.append(torch.from_numpy(y_seq))
             x = torch.stack(x_list)  # (batch_size, block_size)
             y = torch.stack(y_list)
-            # pipeline format: ((idx, targets, global_step), {args})
-            # TODO: no nested tuples, just tuple of tensors
-            yield((x, y, None), {})
+            # DeepSpeed expects tuple of tensors 
+            # TODO: something fucky is going on, switching to normal dataset
+            yield x, y
 
+class CIFAR10Dataset(Dataset):
+    """
+    Basic PyTorch Dataset that returns CIFAR-10 Image tensor stacks
+    """
+    def __init__(self, cfg, root="/root/data_dir", split="train"):
+        super().__init__()
+        self.cfg = cfg
+        self.split = split
+        self.filepath = os.path.join(root, f"{split}.bin")
+
+    def __len__(self):
+        # everything is stored in raw bytes => file_size // block_size = number of images
+        file_size = os.path.getsize(self.filepath)
+        return file_size // self.cfg.block_size
+
+    def __getitem__(self, idx):
+        data = np.memmap(self.filepath, dtype=np.uint8, mode="r")
+
+        if self.cfg.overfit:
+            # when overfitting we just sample the same image over and over again
+            start = 0
+        else: 
+            start = idx
+
+        offset = int(start) * self.cfg.block_size
+        x_seq = np.asarray(data[offset:offset + self.cfg.block_size], dtype=np.int64)
+        y_seq = np.asarray(data[offset + 1:offset + 1 + 3072], dtype=np.int64)
+        # patch last byte
+        y_seq[-1] = x_seq[-1]
+        x = torch.from_numpy(x_seq)
+        y = torch.from_numpy(y_seq)
+        return (x, y)

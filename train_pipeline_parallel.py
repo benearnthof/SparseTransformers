@@ -20,7 +20,7 @@ import deepspeed
 from torch.utils.data import DataLoader
 from deepspeed.utils import RepeatingLoader
 
-from data.memmapdataset import MemmapIterableDataset
+from data.memmapdataset import CIFAR10Dataset
 from modules.dense_pipeline import GPT, GPTConfig, GPTPipe
 # TODO: rework these two utils to work with DeepSpeed Pipeline
 from utils import get_batch, generate_samples, generate_samples_pipe 
@@ -46,6 +46,7 @@ if master_process:
     os.makedirs(cfg.out_dir, exist_ok=True)
 
 torch.manual_seed(1337 + seed_offset)
+# TODO: clean up since we're using DeepSpeed there is no more need to set these manually
 torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
 torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
 device_type = 'cuda' if 'cuda' in cfg.device else 'cpu' # for later use in torch.autocast
@@ -87,12 +88,12 @@ gptconf = GPTConfig(**model_args)
 print(gptconf)
 
 # pipeline expects iterators
-train_ds = MemmapIterableDataset(cfg, split="train")
+train_ds = CIFAR10Dataset(cfg, split="train")
 train_loader = DataLoader(train_ds, batch_size=None, num_workers=4, pin_memory=True)
 train_repl = RepeatingLoader(train_loader)
 train_iter = iter(train_repl)
 
-val_ds = MemmapIterableDataset(cfg, split="val")
+val_ds = CIFAR10Dataset(cfg, split="val")
 val_loader = DataLoader(train_ds, batch_size=None, num_workers=4, pin_memory=True)
 
 # build pipeline model
@@ -129,27 +130,32 @@ else:
 
 
 # helps estimate an arbitrarily accurate loss over either split using many batches
+step = 0
+k = 0
+split = "train"
+
+# TODO: we might need to use the deepspeed loss function interface for pipeline parallel
+# as otherwise inputs and targets get unpacked incorrectly.
 @torch.no_grad()
 def estimate_loss(step: int = None):
     out = {}
-    model_engine.eval()  # switch engine to eval mode (all stages)
+    model_engine.eval()
     for split in ["train", "val"]:
-        ds = MemmapIterableDataset(cfg, split=split)
-        dl = DataLoader(ds, batch_size=None, num_workers=2, pin_memory=True)
-        it = iter(dl)
+        ds = CIFAR10Dataset(cfg, split=split)
+        # dl = DataLoader(ds, batch_size=model_engine.train_micro_batch_size_per_gpu(), pin_memory=True)
+        it = iter(RepeatingLoader(ds))
+        data = next(it)
         losses = []
 
-        for k in range(cfg.eval_iters):
-            data = next(it) 
-            # forward only
-            _, loss = model_engine.eval_batch(data)
+        for _ in range(cfg.eval_iters):
+            _, loss = model_engine.eval_batch(it)  # iterator directly
             losses.append(loss.detach().float().cpu())
 
-        losses = torch.stack(losses)
-        out[split] = losses.mean().item()
+        out[split] = torch.stack(losses).mean().item()
 
     model_engine.train()
     return out
+
 
 # training loop
 t0 = time.time()
@@ -161,7 +167,7 @@ local_iter_num = 0 # number of iterations in the lifetime of this process
 # Debug memory snapshot passes
 if cfg.debug_memory:
     torch.cuda.memory._record_memory_history(max_entries=100000)
-    probe_ds = MemmapIterableDataset(cfg, split="train")
+    probe_ds = CIFAR10Dataset(cfg, split="train")
     probe_dl = torch.utils.data.DataLoader(
         probe_ds, batch_size=None, num_workers=0, pin_memory=True
     )
