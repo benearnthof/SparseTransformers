@@ -166,6 +166,15 @@ def _init_weights(module):
 # forward(self, inputs) ... then unpack them: idx, targets, global_step = inputs
 # at the end we must return another tuple: return (x, targets, global_step)
 # see here: https://www.deepspeed.ai/tutorials/pipeline/#inputs-and-outputs
+# TODO: progressive layer drop needs to be implemented like so
+# https://github.com/deepspeedai/DeepSpeedExamples/blob/01f520e91d6b3235a4cabb1e7e634d9940319047/training/bing_bert/nvidia/modelingpreln_layerdrop.py#L537
+# theta exists here: https://github.com/deepspeedai/DeepSpeedExamples/blob/01f520e91d6b3235a4cabb1e7e634d9940319047/training/bing_bert/nvidia/modelingpreln_layerdrop.py#L668C33-L668C38
+# def forward(self, batch, **kwargs):
+#     progressive_layer_drop = kwargs.get('progressive_layer_drop', False)
+#     theta = kwargs.get('pld_theta', 1.0)
+# can we get theta from kwargs? 
+# https://github.com/deepspeedai/DeepSpeedExamples/blob/6bd444a7c62e9d7d320dd4c1e1142062f50c861d/bing_bert/nvidia/modelingpreln_layerdrop.py#L1159-L1160
+
 class EmbeddingStage(nn.Module):
     # To accommodate PLD we simply pass global_step from stage to stage
     def __init__(self, config, init_fn=_init_weights):
@@ -180,9 +189,7 @@ class EmbeddingStage(nn.Module):
 
     def forward(self, inputs):
         print(f"Embedding Inputs:{inputs}")
-        # TODO: how to pass in global step for PLD? 
-        global_step = None
-        idx, targets = inputs
+        idx = inputs
         b, t = idx.size()
         device = idx.device
         H, W = 32, 32
@@ -196,7 +203,7 @@ class EmbeddingStage(nn.Module):
         chan_emb = self.chan_emb(chans)[None, :, :].expand(b, -1, -1)
         x = self.drop(tok_emb + row_emb + col_emb + chan_emb)
         # forward x along with targets/global_step for later stages
-        return (x, targets)
+        return x
 
 class TransformerStage(nn.Module):
     def __init__(self, config, layer_idx, use_pld=False, pld_theta=None, pld_gamma=None, init_fn=_init_weights):
@@ -207,6 +214,10 @@ class TransformerStage(nn.Module):
         super().__init__()
         self.layer_idx = layer_idx
         self.block = Block(config)
+        # TODO: https://github.com/deepspeedai/DeepSpeedExamples/issues/169
+        # the deepspeed engine maintains theta and gamma values already here: 
+        # https://github.com/deepspeedai/DeepSpeed/blob/9bf1e9af3a3a958fc74b5d5d57e56b72559f5458/deepspeed/runtime/engine.py#L1530-L1531
+        # state is also already updated after every global step
         self.use_pld = use_pld
         if use_pld:
             # Each stage can keep its own scheduler instance
@@ -218,8 +229,8 @@ class TransformerStage(nn.Module):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
 
     def forward(self, inputs):
-        x, targets = inputs
-        # TODO: how to pass global step to pipeline forward?
+        x = inputs
+        # TODO: get pld theta from engine kwargs https://github.com/deepspeedai/DeepSpeed/blob/9bf1e9af3a3a958fc74b5d5d57e56b72559f5458/deepspeed/runtime/engine.py#L1530-L1531
         global_step = None
         # compute p_i if PLD enabled and we have a global_step
         p_i = None
@@ -235,7 +246,7 @@ class TransformerStage(nn.Module):
         # if p_i is None, block will act normally
         x = self.block(x, p_i=p_i)
         # pass through tuple for next stage
-        return (x, targets)
+        return x
 
 class FinalStage(nn.Module):
     def __init__(self, config, init_fn=_init_weights):
@@ -248,16 +259,11 @@ class FinalStage(nn.Module):
         torch.nn.init.zeros_(self.lm_head.weight)
 
     def forward(self, inputs):
-        x, targets = inputs
+        x = inputs
         x = self.ln_f(x)
         logits = self.lm_head(x)
-        if targets is not None:
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
-        else:
-            # inference-time mini-optimization: only forward the lm_head on the very last position
-            logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
-            loss = None
-        return logits, loss
+        # loss calculation is performed by pipeline engine
+        return logits.view(-1, logits.size(-1)) # , targets.view(-1), ignore_index=-1
 
 
 @dataclass
@@ -513,7 +519,7 @@ class GPTPipe(PipelineModule):
         # transformer layer
         super().__init__(
             layers=self.specs,
-            loss_fn=None,
+            loss_fn=torch.nn.CrossEntropyLoss(), #loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
             num_stages=config.pipeline_parallel_stages,
             partition_method=config.pp_partition_method, # TODO: type:transformer partitioning for better balancing
             seed_layers=True,

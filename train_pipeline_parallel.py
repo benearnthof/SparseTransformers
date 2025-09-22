@@ -101,9 +101,10 @@ val_loader = DataLoader(train_ds, batch_size=None, num_workers=4, pin_memory=Tru
 model = GPTPipe(gptconf)
 
 # initialize with DeepSpeed
-model_engine, optimizer, _, _ = deepspeed.initialize(
+model_engine, optimizer, training_loader, _ = deepspeed.initialize(
     model=model,
-    # TODO: manually set optimizer groups like we did originally
+    training_data=train_ds,
+    # TODO: manually set optimizer groups like we did originally, passed in as model_parameters
     config="ds_config.json"
 )
 
@@ -142,9 +143,11 @@ it = iter(RepeatingLoader(dl))
 data = next(iter(dl))
 data[0] = data[0].to(model_engine.device)
 data[1] = data[1].to(model_engine.device)
+# updated since we only forward data
+data = data[0]
 model_engine.module(data)
 
-loss = model_engine.eval_batch(it)  # iterator directly
+loss = model_engine.eval_batch(iter(training_loader))  # iterator directly
 
 # Here they seup cifar10
 # https://github.com/deepspeedai/DeepSpeedExamples/blob/master/training/pipeline_parallelism/train.py

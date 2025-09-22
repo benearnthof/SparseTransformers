@@ -24,8 +24,7 @@ apt-get update
 apt-get install -y libopenmpi-dev openmpi-bin
 pip install --force-reinstall --no-cache-dir mpi4py
 
-# TODO: move wandb logging to beginning of train file so we log full debug info
-wandb init
+
 # make sure to export these on new GPU nodes
 export DEEPSPEED_COMM_BACKEND=nccl
 export NCCL_DEBUG=INFO
@@ -35,6 +34,9 @@ export NCCL_P2P_LEVEL=NVL
 # export NCCL_SOCKET_IFNAME=ens1
 # export NCCL_P2P_LEVEL=SYS
 # # for multinode? 
+
+# TODO: move wandb logging to beginning of train file so we log full debug info
+wandb init
 
 nvidia-smi topo -m
 
