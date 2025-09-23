@@ -43,3 +43,4 @@ nvidia-smi topo -m
 cd SparseTransformers
 torchrun --nproc_per_node=1 train_pipeline_parallel.py
 
+torchrun --nproc_per_node=2 disttest.py

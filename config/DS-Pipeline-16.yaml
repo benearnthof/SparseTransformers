@@ -20,7 +20,7 @@ wandb_run_name: 'Pipeline-1GPU' # 'run' + str(time.time())
 # data
 dataset: 'cifar-10'
 overfit: True
-batch_size: 4 # if gradient_accumulation_steps > 1, this is the micro-batch size
+batch_size: 8 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size: 3072
 
 # model
@@ -52,7 +52,7 @@ deepspeed:
   gradient_accumulation_steps: 1 # we provide train_batch_size and gradient_accumulation_steps, number of GPUs is given and micro_batch_size is inferred automatically
   gradient_clipping: 1.0
   # Pipeline parallel settings
-  pipeline_parallel_stages: 1
+  pipeline_parallel_stages: 2
   pp_partition_method: "uniform"
   pp_activation_checkpoint_interval: 0
   # Scheduler
@@ -81,7 +81,7 @@ deepspeed:
   zero_quantized_weights: False # Indicates whether to enable communication efficient quantized weights of ZeRO++. Default: False
   zero_quantized_gradients: False # Indicates whether to enable communication efficient quantized gradients of ZeRO++. Default: False
   bf16: # we stick to bfloat16 since our hardware supports it
-    enabled: True
+    enabled: False
   optimizer:
     type: AdamW # CPU optimizers: Adam, AdamW; GPU optimizers: FusedAdam/W, FusedLamb, OneBitAdam, ZeroOneAdam, OnebitLamb https://deepspeed.readthedocs.io/en/latest/optimizers.html
     params:

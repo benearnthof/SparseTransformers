@@ -1,5 +1,4 @@
 # Training loop ported for DeepSpeed
-
 import random
 random.seed(1) # set a seed so that the results are consistent
 import os
@@ -22,12 +21,9 @@ from deepspeed.runtime.dataloader import RepeatingLoader
 from data.memmapdataset import CIFAR10Dataset
 from modules.dense import GPTConfig
 from modules.pipeline import GPTPipe
-# TODO: rework these two utils to work with DeepSpeed Pipeline
 from utils import (
     get_iterator,
-    get_batch,
-    generate_samples,
-    generate_samples_pipe,
+    # generate_samples_pipe,
 )
 
 deepspeed.init_distributed()
@@ -178,7 +174,7 @@ while True:
         img_path = f"eval_{iter_num}.jpg"
         # TODO: change split to eval for actual training runs
         # TODO: generate samples should use inference https://www.deepspeed.ai/inference/
-        generate_samples_pipe(model_engine, n=cfg.eval_imgs, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
+        # generate_samples_pipe(model_engine, n=cfg.eval_imgs, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
         if cfg.wandb_log:
             wandb.log({
                 "iter": iter_num,
@@ -186,7 +182,7 @@ while True:
                 "val/loss": losses['val'],
                 "lr": model_engine.lr_scheduler.get_lr()[0],
                 "tpi": tokens_per_iter, # TODO: calculate mfu from tokens/iter & tokens/second
-                "eval_images": wandb.Image(img_path),
+                # "eval_images": wandb.Image(img_path),
 
             })
         if losses['val'] < best_val_loss or cfg.always_save_checkpoint:
