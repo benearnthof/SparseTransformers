@@ -27,7 +27,7 @@ pip install --force-reinstall --no-cache-dir mpi4py
 
 # make sure to export these on new GPU nodes
 export DEEPSPEED_COMM_BACKEND=nccl
-export NCCL_DEBUG=INFO
+# export NCCL_DEBUG=INFO
 # for A5000 GPUs
 export NCCL_P2P_DISABLE=1
 export NCCL_P2P_LEVEL=NVL
@@ -40,5 +40,6 @@ wandb init
 
 nvidia-smi topo -m
 
+cd SparseTransformers
 torchrun --nproc_per_node=1 train_pipeline_parallel.py
 

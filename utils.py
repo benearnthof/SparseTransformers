@@ -4,6 +4,18 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 
+from data.memmapdataset import CIFAR10Dataset
+
+from torch.utils.data import DataLoader
+from deepspeed.runtime.dataloader import RepeatingLoader
+
+# quick helper to set up iterators for auxiliary functions
+def get_iterator(ds, cfg, split):
+    bs = cfg.batch_size if split=="train" else cfg.eval_batchsize
+    dta = ds(cfg, split=split)
+    dl= DataLoader(dta, batch_size=bs)
+    return iter(RepeatingLoader(dl))
+
 def get_batch(split, cfg, device_type="cuda"):
     if split == 'train':
         data = np.memmap(os.path.join("/root/data_dir", 'train.bin'), dtype=np.uint8, mode='r')
@@ -144,12 +156,20 @@ def generate_samples_pipe(model_engine, cfg, n=4, temperature=1.0, top_k=None, s
     GPTPipe inherits from PipelineModule which implements .forward implicitly 
     https://github.com/deepspeedai/DeepSpeed/blob/80033a82938f6cd8ce4988a63c914941e7a8f324/deepspeed/runtime/pipe/module.py#L340
     """
+    # TODO: does this work when the pipeline no longer fits on a single GPU?
+    # inference is also not supported with PP currently
+    # https://github.com/deepspeedai/DeepSpeed/blob/8c7c56a932b6a41e191242fc74cccc680ac8e1e3/deepspeed/inference/engine.py#L416
+    it = get_iterator(CIFAR10Dataset, cfg, split="train")
+    X, _ = next(it)
+    # model_engine(next(it))
+    # model_engine.eval_batch(it)
+
     raw_model = model_engine.module  # unwrap the GPTPipe
     raw_model.eval()
 
     # Load a small batch from disk
     # TODO: pass in data loader to generalize for Imagenet64
-    X, _ = get_batch(split=split, cfg=cfg)
+    # X, _ = get_batch(split=split, cfg=cfg)
     X = X[:n].to(model_engine.device)  # (n, 3072)
 
     device = model_engine.device
@@ -165,20 +185,33 @@ def generate_samples_pipe(model_engine, cfg, n=4, temperature=1.0, top_k=None, s
         X_masked[:, start:end] = 0
 
     preds = []
+    # loop over number of desired eval images
     for i in range(n):
-        cur = X[i, :half_pixels]
+        input_ids = X[i, :half_pixels]
+        # TODO: pack this into function
         # autoregressive filling channel by channel
-        cur = raw_model.generate(cur.unsqueeze(0), max_new_tokens=half_pixels,
-                                 temperature=temperature, top_k=top_k)[0]
-        cur = torch.cat([cur, X[i, 1024:1024+half_pixels]], dim=0)
-        cur = raw_model.generate(cur.unsqueeze(0), max_new_tokens=half_pixels,
-                                 temperature=temperature, top_k=top_k)[0]
-        cur = torch.cat([cur, X[i, 2048:2048+half_pixels]], dim=0)
-        cur = raw_model.generate(cur.unsqueeze(0), max_new_tokens=half_pixels,
-                                 temperature=temperature, top_k=top_k)[0]
-
-        assert cur.numel() == 3072
-        preds.append(cur)
+        # first channel
+        for _ in range(half_pixels): # max_new tokens
+            with torch.no_grad():
+                logits = raw_model(input_ids.unsqueeze(0))
+            next_token = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)[0]
+            input_ids = torch.cat([input_ids, next_token], dim=-1)
+        # now input_ids is 1024 entries long. => append 512 tokens of second channel
+        input_ids = torch.cat([input_ids, X[i, 1024:1024+half_pixels]], dim=0)
+        for _ in range(half_pixels): # max_new tokens
+            with torch.no_grad():
+                logits = raw_model(input_ids.unsqueeze(0))
+            next_token = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)[0]
+            input_ids = torch.cat([input_ids, next_token], dim=-1)
+        # now input_ids is 2048 entries long. => append 512 tokens of third channel
+        input_ids = torch.cat([input_ids, X[i, 2048:2048+half_pixels]], dim=0)
+        for _ in range(half_pixels): # max_new tokens
+            with torch.no_grad():
+                logits = raw_model(input_ids.unsqueeze(0))
+            next_token = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)[0]
+            input_ids = torch.cat([input_ids, next_token], dim=-1)
+        assert input_ids.numel() == 3072
+        preds.append(input_ids)
 
     preds = torch.stack(preds).to(device)
 

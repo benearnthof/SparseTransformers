@@ -13,8 +13,6 @@ import json
 from omegaconf import OmegaConf
 from collections import OrderedDict
 
-from contextlib import nullcontext
-
 import torch
 import deepspeed
 from torch.utils.data import DataLoader
@@ -25,9 +23,13 @@ from data.memmapdataset import CIFAR10Dataset
 from modules.dense import GPTConfig
 from modules.pipeline import GPTPipe
 # TODO: rework these two utils to work with DeepSpeed Pipeline
-from utils import get_batch, generate_samples, generate_samples_pipe 
+from utils import (
+    get_iterator,
+    get_batch,
+    generate_samples,
+    generate_samples_pipe,
+)
 
-# os.environ["WORLD_SIZE"] = "2"
 deepspeed.init_distributed()
 # TODO: pass this as commandline argument
 cfg = OmegaConf.load(r"./config/DS-Pipeline-16.yaml")
@@ -47,15 +49,8 @@ if master_process:
     os.makedirs(cfg.out_dir, exist_ok=True)
 
 torch.manual_seed(1337 + seed_offset)
-# TODO: clean up since we're using DeepSpeed there is no more need to set these manually
-torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
-torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
-device_type = 'cuda' if 'cuda' in cfg.device else 'cpu' # for later use in torch.autocast
-# note: float16 data type will automatically use a GradScaler
-ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[cfg.dtype]
 
 # DeepSpeed manages autocast and loss-scaling internally.
-ctx = nullcontext()
 
 os.makedirs("data_dir", exist_ok=True)
 
@@ -125,13 +120,6 @@ else:
     print("Training from scratch.")
     checkpoint = None
 
-# quick helper to set up iterators for auxiliary functions
-def get_iterator(ds, cfg, split):
-    bs = cfg.batch_size if split=="train" else cfg.eval_batchsize
-    dta = ds(cfg, split=split)
-    dl= DataLoader(dta, batch_size=bs)
-    return iter(RepeatingLoader(dl))
-
 # helps estimate an arbitrarily accurate loss over either split using many batches
 # TODO: pass keep_prob = 1 to PLD during eval
 @torch.no_grad()
@@ -149,18 +137,13 @@ def estimate_loss():
 # training loop
 t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
-running_mfu = -1.0
-
-it = get_iterator(CIFAR10Dataset, cfg, split="train")
-loss = model_engine.train_batch(it)
 
 # Debug memory snapshot passes
 if cfg.debug_memory:
     torch.cuda.memory._record_memory_history(max_entries=100000)
     it = get_iterator(CIFAR10Dataset, cfg, split="train")
     for _ in range(2):
-        with ctx:
-            loss = model_engine.train_batch(it)
+        loss = model_engine.train_batch(it)
     # Dump snapshot to disk
     try: # TODO: update filenames for DeepSpeed
         fname = f"layers_{cfg.n_layer}_remat_{0}_batchsize_{cfg.batch_size}.pickle"
@@ -192,24 +175,19 @@ while True:
         # Build pipeline argument (EmbeddingStage expects idx, targets, global_step)
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-        # img_path = f"eval_{iter_num}.jpg"
+        img_path = f"eval_{iter_num}.jpg"
         # TODO: change split to eval for actual training runs
-        # TODO: update generate_samples function to do predictions without layer dropping
-        # TODO: generate samples should use model_engine.eval_batch
-        # generate_samples(raw_model.module, n=cfg.eval_imgs, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
-        theta = 0
-        # TODO: port to pipeline
-        # if hasattr(model_engine.module, "progressive_layer_drop"):
-        #     theta = model_engine.module.progressive_layer_drop.get_theta()
+        # TODO: generate samples should use inference https://www.deepspeed.ai/inference/
+        generate_samples_pipe(model_engine, n=cfg.eval_imgs, temperature=1.0, top_k=None, save_path=img_path, cfg=cfg, split="train")
         if cfg.wandb_log:
             wandb.log({
                 "iter": iter_num,
                 "train/loss": losses['train'],
                 "val/loss": losses['val'],
                 "lr": model_engine.lr_scheduler.get_lr()[0],
-                "mfu": running_mfu*100, # convert to percentage
-                # "eval_images": wandb.Image(img_path),
-                # "pld_theta": theta,
+                "tpi": tokens_per_iter, # TODO: calculate mfu from tokens/iter & tokens/second
+                "eval_images": wandb.Image(img_path),
+
             })
         if losses['val'] < best_val_loss or cfg.always_save_checkpoint:
             best_val_loss = losses['val']
@@ -231,20 +209,7 @@ while True:
         break
 
     # train_batch combines forward, backward and optim steps
-    with ctx:
-        data = ((X, Y, iter_num), {})
-        loss = model_engine.train_batch(data)
-    # immediately async prefetch next batch while model is doing the forward pass on the GPU
-    X, Y = get_batch('train', cfg)
-
-    # clip the gradient
-    if cfg.grad_clip != 0.0:
-        # if using ZeRO stage >0: use engine.clip_grad_norm_ when available:
-        try:
-            model_engine.clip_grad_norm_(cfg.grad_clip)
-        except AttributeError:
-            # fallback: use torch clip (may be incorrect for sharded params)
-            torch.nn.utils.clip_grad_norm_(model_engine.module.parameters(), cfg.grad_clip)
+    loss = model_engine.train_batch()
 
     # timing and logging (uses 'loss' from last micro-batch)
     t1 = time.time()
@@ -253,11 +218,8 @@ while True:
     if iter_num % cfg.log_interval == 0 and master_process:
         # TODO: Gradient Accumulation setting in DeepSpeed Config
         lossf = loss.item() * cfg.deepspeed.gradient_accumulation_steps
-        # if local_iter_num >= 5:
-            # TODO: update estimate_mfu to work with pipeline
-            # mfu = raw_model.estimate_mfu(cfg.batch_size * cfg.deepspeed.gradient_accumulation_steps, dt)
-            # running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-        print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms") #, mfu {running_mfu*100:.2f}%
+        # TODO: calculate mfu via tokens/second    
+        print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms")
 
     iter_num += 1
     local_iter_num += 1

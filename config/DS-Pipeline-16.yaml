@@ -13,9 +13,9 @@ always_save_checkpoint: True # if True, always save a checkpoint after each eval
 ckpt_path: Null #"/root/SparseTransformers/out/DeepSpeed-16-1GPU_ds_ckpt" # if ckpt_path is not None we load from checkpoint
 
 # wandb logging
-wandb_log: False # disabled by default
+wandb_log: True # disabled by default
 wandb_project: 'sparse-transformer'
-wandb_run_name: 'Pipeline-2' # 'run' + str(time.time())
+wandb_run_name: 'Pipeline-1GPU' # 'run' + str(time.time())
 
 # data
 dataset: 'cifar-10'
@@ -26,7 +26,7 @@ block_size: 3072
 # model
 # For testing purposes
 n_layer: 16
-n_head: 4
+n_head: 2
 n_embd: 256
 # mlp_dim is multiplier: 2 => mlp_dimension = 2 * n_embed
 mlp_dim: 2 # half-size projection as per section 7 of the paper
@@ -36,8 +36,6 @@ attn_dropout: 0 # we do not apply dropout within the attention blocks [...] and 
 resid_dropout: 0.05 # only apply it at the end of each residual addition
 bias: False # do we use bias inside LayerNorm and Linear layers?
 
-# gradient clipping as specified in paper
-grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
 # DDP settings
 backend: nccl # 'nccl', 'gloo', etc.
 # System settings
@@ -52,6 +50,7 @@ deepspeed:
   wall_clock_breakdown: False # Enable timing of the latency of forward/backward/update training phases. Default: False
   train_batch_size: 16 # must be equal to train_micro_batch_size * gradient_accumulation_steps * number of GPUs
   gradient_accumulation_steps: 1 # we provide train_batch_size and gradient_accumulation_steps, number of GPUs is given and micro_batch_size is inferred automatically
+  gradient_clipping: 1.0
   # Pipeline parallel settings
   pipeline_parallel_stages: 1
   pp_partition_method: "uniform"
