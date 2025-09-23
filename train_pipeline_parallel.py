@@ -75,9 +75,9 @@ model_args = dict(
     vocab_size=None,
     attn_dropout=cfg.attn_dropout,
     resid_dropout=cfg.resid_dropout,
-    progressive_layer_drop=cfg.deepspeed.progressive_layer_drop.enabled,
-    pld_theta=cfg.deepspeed.progressive_layer_drop.theta,
-    pld_gamma=cfg.deepspeed.progressive_layer_drop.gamma,
+    progressive_layer_drop=False, #cfg.deepspeed.progressive_layer_drop.enabled,
+    pld_theta=1,#cfg.deepspeed.progressive_layer_drop.theta,
+    pld_gamma=0.000001, #cfg.deepspeed.progressive_layer_drop.gamma,
     pipeline_parallel_stages=cfg.deepspeed.pipeline_parallel_stages,
     pp_partition_method=cfg.deepspeed.pp_partition_method,
     pp_activation_checkpoint_interval=cfg.deepspeed.pp_activation_checkpoint_interval,
@@ -150,6 +150,9 @@ def estimate_loss():
 t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
 running_mfu = -1.0
+
+it = get_iterator(CIFAR10Dataset, cfg, split="train")
+loss = model_engine.train_batch(it)
 
 # Debug memory snapshot passes
 if cfg.debug_memory:

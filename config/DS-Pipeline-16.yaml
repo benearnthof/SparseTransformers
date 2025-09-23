@@ -90,10 +90,6 @@ deepspeed:
       betas: [0.95, 0.95] # https://arxiv.org/pdf/2505.21829 argues that the choice of equal betas yields robust training for a wide spectrum of settings
       weight_decay: 0.01 # might have to decrease this for larger datasets https://www.arxiv.org/pdf/2405.13698
       eps: 1e-8
-  progressive_layer_drop: # https://www.deepspeed.ai/tutorials/progressive_layer_dropping/
-    enabled: False
-    theta: 0.5
-    gamma: 0.001 # 100/total steps
   flops_profiler:
     enabled: False # Enables flops profiler, also enables wall_clock_breakdown.
     profile_step: 25 # The global training step at which to profile. Warm up steps are needed for accurate time measurement. Default: 1

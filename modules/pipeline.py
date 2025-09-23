@@ -18,7 +18,6 @@ from modules.dense import (
 )
 
 import deepspeed
-from deepspeed.runtime.progressive_layer_drop import ProgressiveLayerDrop
 # TODO: Gradient Remat / Activation Checkpointing via DeepSpeed
 from deepspeed.pipe import PipelineModule, LayerSpec
 
@@ -55,10 +54,6 @@ def _init_weights(module):
 
 # Pipeline Parallel in DeepSpeed requires us to split the transformer into stages, such 
 # that we can wrap them up in a list and pass it to the scheduler
-# TODO: arguments must be collected into a tuple: 
-# forward(self, inputs) ... then unpack them: idx, targets, global_step = inputs
-# at the end we must return another tuple: return (x, targets, global_step)
-# see here: https://www.deepspeed.ai/tutorials/pipeline/#inputs-and-outputs
 # TODO: progressive layer drop needs to be implemented like so
 # https://github.com/deepspeedai/DeepSpeedExamples/blob/01f520e91d6b3235a4cabb1e7e634d9940319047/training/bing_bert/nvidia/modelingpreln_layerdrop.py#L537
 # theta exists here: https://github.com/deepspeedai/DeepSpeedExamples/blob/01f520e91d6b3235a4cabb1e7e634d9940319047/training/bing_bert/nvidia/modelingpreln_layerdrop.py#L668C33-L668C38
@@ -81,7 +76,6 @@ class EmbeddingStage(nn.Module):
         self.apply(init_fn)
 
     def forward(self, inputs):
-        # print(f"Embedding Inputs:{inputs}")
         idx = inputs
         b, t = idx.size()
         device = idx.device
@@ -99,45 +93,27 @@ class EmbeddingStage(nn.Module):
         return x
 
 class TransformerStage(nn.Module):
-    def __init__(self, config, layer_idx, use_pld=False, pld_theta=None, pld_gamma=None, init_fn=_init_weights):
+    def __init__(self, config, init_fn=_init_weights):
         """
         layer_idx: zero-based index used to compute the per-layer p_i.
         use_pld: whether to enable PLD here.
         """
         super().__init__()
-        self.layer_idx = layer_idx
         self.block = Block(config)
         # TODO: https://github.com/deepspeedai/DeepSpeedExamples/issues/169
         # the deepspeed engine maintains theta and gamma values already here: 
         # https://github.com/deepspeedai/DeepSpeed/blob/9bf1e9af3a3a958fc74b5d5d57e56b72559f5458/deepspeed/runtime/engine.py#L1530-L1531
         # state is also already updated after every global step
-        self.use_pld = use_pld
-        if use_pld:
-            # Each stage can keep its own scheduler instance
-            self.pld = ProgressiveLayerDrop(theta=pld_theta, gamma=pld_gamma)
         self.apply(init_fn)
         # apply special scaled init to the residual projections, per GPT-2 paper
         for pn, p in self.named_parameters():
             if pn.endswith('c_proj.weight'):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
 
-    def forward(self, inputs):
+    def forward(self, inputs, progressive_layer_drop=False):
         x = inputs
         # TODO: get pld theta from engine kwargs https://github.com/deepspeedai/DeepSpeed/blob/9bf1e9af3a3a958fc74b5d5d57e56b72559f5458/deepspeed/runtime/engine.py#L1530-L1531
-        global_step = None
-        # compute p_i if PLD enabled and we have a global_step
-        p_i = None
-        if self.use_pld and (global_step is not None):
-            # update scheduler and get theta
-            self.pld.update_state(int(global_step))
-            theta_t = self.pld.get_theta()
-            L = float(self.block.config.n_layer) if hasattr(self.block, "config") else float(self.block.config.n_layer)
-            # get_layer_prob:
-            L = float(self.block.config.n_layer)
-            drop_fraction = (self.layer_idx + 1) / L * (1.0 - theta_t)
-            p_i = float(min(max(1.0 - drop_fraction, 1e-6), 1.0))
-        # if p_i is None, block will act normally
-        x = self.block(x, p_i=p_i)
+        x = self.block(x, p_i=None)
         # pass through tuple for next stage
         return x
 
@@ -188,10 +164,6 @@ class GPTPipe(PipelineModule):
                 LayerSpec(
                     TransformerStage,
                     config,
-                    i,
-                    config.progressive_layer_drop,
-                    config.pld_theta,
-                    config.pld_gamma
                 )
             )
         # Final stage
