@@ -50,7 +50,6 @@ class CausalSelfAttention(nn.Module):
     self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))
                                 .view(1, 1, config.block_size, config.block_size))
 
-
   def forward(self, x):
     B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
     # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -143,6 +142,9 @@ class GPTConfig:
     progressive_layer_drop: bool = False
     pld_theta: float = 0.5
     pld_gamma: float = 0.001
+    pipeline_parallel_stages: int = 2
+    pp_partition_method: str = "uniform"
+    pp_activation_checkpoint_interval: int = 0
 
 class GPT(nn.Module):
 

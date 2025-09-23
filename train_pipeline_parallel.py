@@ -19,10 +19,11 @@ import torch
 import deepspeed
 from torch.utils.data import DataLoader
 import torch.distributed as dist
-from deepspeed.runtime.dataloader import RepeatingLoader, DeepSpeedDataLoader
+from deepspeed.runtime.dataloader import RepeatingLoader
 
 from data.memmapdataset import CIFAR10Dataset
-from modules.dense_pipeline import GPT, GPTConfig, GPTPipe
+from modules.dense import GPTConfig
+from modules.pipeline import GPTPipe
 # TODO: rework these two utils to work with DeepSpeed Pipeline
 from utils import get_batch, generate_samples, generate_samples_pipe 
 
@@ -120,7 +121,6 @@ if cfg.ckpt_path is not None:
         print(f"WARNING: No DeepSpeed checkpoint found at {cfg.ckpt_path}")
     else:
         print(f"DeepSpeed checkpoint loaded successfully from {load_path}")
-
 else:
     print("Training from scratch.")
     checkpoint = None
@@ -154,7 +154,7 @@ running_mfu = -1.0
 # Debug memory snapshot passes
 if cfg.debug_memory:
     torch.cuda.memory._record_memory_history(max_entries=100000)
-    it = get_iterator(CIFAR10Dataset, cfg, split)
+    it = get_iterator(CIFAR10Dataset, cfg, split="train")
     for _ in range(2):
         with ctx:
             loss = model_engine.train_batch(it)
@@ -187,7 +187,7 @@ while True:
     # evaluation & checkpointing
     if iter_num % cfg.eval_interval == 0 and master_process:
         # Build pipeline argument (EmbeddingStage expects idx, targets, global_step)
-        losses = estimate_loss(step=iter_num)
+        losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         # img_path = f"eval_{iter_num}.jpg"
         # TODO: change split to eval for actual training runs
