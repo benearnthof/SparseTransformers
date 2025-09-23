@@ -5,9 +5,13 @@ Users simply provide a PyTorch dataset and DeepSpeed will automatically handle
 batch creation appropriately.
 """
 
+import argparse
 import torch
 import numpy as np
 import os
+import deepspeed
+
+import torch.distributed as dist
 from torch.utils.data import IterableDataset, Dataset
 
 # TODO: IO & Shuffling. For distributed training we may want to precompute index list per epoch
@@ -104,3 +108,41 @@ class CIFAR10Dataset(Dataset):
         x = torch.from_numpy(x_seq)
         y = torch.from_numpy(y_seq)
         return x, y
+
+
+def pipeline_trainset(local_rank, cfg, split, ds=CIFAR10Dataset):
+    """
+    Helper for pipeline parallel training
+    """
+    dist.barrier()
+    if local_rank != 0:
+        dist.barrier()
+    trainset = ds(cfg, split=split)
+    if local_rank == 0:
+        dist.barrier()
+    return trainset
+
+def get_args():
+    parser = argparse.ArgumentParser(description='CIFAR')
+    parser.add_argument('--local_rank',
+                        type=int,
+                        default=-1,
+                        help='local rank passed from distributed launcher')
+    # parser.add_argument('-s',
+    #                     '--steps',
+    #                     type=int,
+    #                     default=100,
+    #                     help='quit after this many steps')
+    # parser.add_argument('-p',
+    #                     '--pipeline-parallel-size',
+    #                     type=int,
+    #                     default=2,
+    #                     help='pipeline parallelism')
+    parser.add_argument('--backend',
+                        type=str,
+                        default='nccl',
+                        help='distributed backend')
+    parser.add_argument('--seed', type=int, default=1138, help='PRNG seed')
+    parser = deepspeed.add_config_arguments(parser)
+    args = parser.parse_args()
+    return args

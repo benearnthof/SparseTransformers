@@ -18,7 +18,11 @@ from torch.utils.data import DataLoader
 import torch.distributed as dist
 from deepspeed.runtime.dataloader import RepeatingLoader
 
-from data.memmapdataset import CIFAR10Dataset
+from data.memmapdataset import (
+    CIFAR10Dataset,
+    pipeline_trainset,
+    get_args
+)
 from modules.dense import GPTConfig
 from modules.pipeline import GPTPipe
 from utils import (
@@ -26,7 +30,13 @@ from utils import (
     # generate_samples_pipe,
 )
 
-deepspeed.init_distributed()
+args = get_args()
+
+deepspeed.init_distributed(dist_backend=args.backend)
+
+args.local_rank = int(os.environ["LOCAL_RANK"])
+torch.cuda.set_device(args.local_rank)
+
 # TODO: pass this as commandline argument
 cfg = OmegaConf.load(r"./config/DS-Pipeline-16.yaml")
 
@@ -38,13 +48,8 @@ def print_peak_memory(prefix, device):
     if device == 0:
         print(f"{prefix}: {torch.cuda.max_memory_allocated(device) // 1e6}MB ")
 
-master_process = dist.get_rank() == 0
-seed_offset = 0
-
-if master_process:
+if args.local_rank == 0:
     os.makedirs(cfg.out_dir, exist_ok=True)
-
-torch.manual_seed(1337 + seed_offset)
 
 # DeepSpeed manages autocast and loss-scaling internally.
 
@@ -77,12 +82,16 @@ model_args = dict(
 model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 256
 gptconf = GPTConfig(**model_args)
 
-print(gptconf)
+seed_offset = args.local_rank
+torch.manual_seed(args.seed + seed_offset)
+deepspeed.runtime.utils.set_random_seed(args.seed + seed_offset)
 
 # pipeline expects iterators
-train_ds = CIFAR10Dataset(cfg, split="train")
-# TODO: actually pass val_ds to validation functions xd
-val_ds = CIFAR10Dataset(cfg, split="val")
+# train_ds = CIFAR10Dataset(cfg, split="train")
+# # TODO: actually pass val_ds to validation functions xd
+# val_ds = CIFAR10Dataset(cfg, split="val")
+
+trainset = pipeline_trainset(args.local_rank, cfg, split="train")
 
 # build pipeline model
 model = GPTPipe(gptconf)
@@ -90,12 +99,12 @@ model = GPTPipe(gptconf)
 # initialize with DeepSpeed
 model_engine, optimizer, training_loader, _ = deepspeed.initialize(
     model=model,
-    training_data=train_ds,
+    training_data=trainset,
     # TODO: manually set optimizer groups like we did originally, passed in as model_parameters
     config="ds_config.json"
 )
 
-if master_process:
+if args.local_rank == 0:
     print_peak_memory("Max memory allocated after creating model/engine", 0)
 
 tokens_per_iter = cfg.deepspeed.gradient_accumulation_steps * model_engine.world_size * cfg.batch_size * cfg.block_size
@@ -152,7 +161,7 @@ if cfg.debug_memory:
 
 # logging
 # TODO: move to deepspeed config
-if cfg.wandb_log and master_process:
+if cfg.wandb_log and args.local_rank == 0:
     import wandb
     wandb.init(project=cfg.wandb_project, name=cfg.wandb_run_name + f"{str(time.time())}", config=dict(cfg))
     artifact = wandb.Artifact("config", type="config")
@@ -165,9 +174,11 @@ if cfg.wandb_log and master_process:
         wandb.log_artifact(artifact)
         print(f"Logged memory snapshot to W&B.")
 
+
+
 while True:
     # evaluation & checkpointing
-    if iter_num % cfg.eval_interval == 0 and master_process:
+    if iter_num % cfg.eval_interval == 0 and args.local_rank == 0:
         # Build pipeline argument (EmbeddingStage expects idx, targets, global_step)
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
@@ -211,7 +222,7 @@ while True:
     t1 = time.time()
     dt = t1 - t0
     t0 = t1
-    if iter_num % cfg.log_interval == 0 and master_process:
+    if iter_num % cfg.log_interval == 0 and args.local_rank == 0:
         # TODO: Gradient Accumulation setting in DeepSpeed Config
         lossf = loss.item() * cfg.deepspeed.gradient_accumulation_steps
         # TODO: calculate mfu via tokens/second    
