@@ -6,6 +6,7 @@ out_dir: out
 eval_interval: 500
 log_interval: 10
 eval_iters: 10
+eval_batchsize: 1
 eval_imgs: 1 # number of images generated during eval
 eval_only: False # if True, script exits right after the first eval
 always_save_checkpoint: True # if True, always save a checkpoint after each eval

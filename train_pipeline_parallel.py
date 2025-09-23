@@ -90,12 +90,8 @@ print(gptconf)
 
 # pipeline expects iterators
 train_ds = CIFAR10Dataset(cfg, split="train")
-train_loader = DataLoader(train_ds, batch_size=None, num_workers=4, pin_memory=True)
-train_repl = RepeatingLoader(train_loader)
-train_iter = iter(train_repl)
 
 val_ds = CIFAR10Dataset(cfg, split="val")
-val_loader = DataLoader(train_ds, batch_size=None, num_workers=4, pin_memory=True)
 
 # build pipeline model
 model = GPTPipe(gptconf)
@@ -142,67 +138,31 @@ it = iter(RepeatingLoader(dl))
 
 data = next(iter(dl))
 data[0] = data[0].to(model_engine.device)
-data[1] = data[1].to(model_engine.device)
-# updated since we only forward data
 data = data[0]
-
 model_engine.module(data)
 
 loss = model_engine.eval_batch(iter(training_loader))  # iterator directly
 
-# Here they seup cifar10
-# https://github.com/deepspeedai/DeepSpeedExamples/blob/master/training/pipeline_parallelism/train.py
-# as a trainset for training
-# we need to pass in the loss function at the end of the pipeline module
-
-
-
-
-
-
-
-
-
-
-
-
-# TODO: we might need to use the deepspeed loss function interface for pipeline parallel
-# as otherwise inputs and targets get unpacked incorrectly.
+# TODO: pass keep_prob = 1 to PLD during eval
 @torch.no_grad()
-def estimate_loss(step: int = None):
+def estimate_loss():
     out = {}
-    model_engine.eval()
     for split in ["train", "val"]:
         ds = CIFAR10Dataset(cfg, split=split)
-        dl = DataLoader(ds, 4, pin_memory=True)
+        dl = DataLoader(ds, batch_size=cfg.eval_batchsize)
         it = iter(RepeatingLoader(dl))
-        # passing the data like this works, eval_batch & train_batch perform
-        # loss calculation at the end and do not pass targets around. 
-        # TODO: add loss calculation to GPTPipe, remove targets from pipeline steps
-        # TODO: to pass in global step we return nested tuples from dataloader ?  
-        data = next(iter(dl))
-        data[0] = data[0].to(model_engine.device)
-        data[1] = data[1].to(model_engine.device)
-        model_engine.module(data)
-
         losses = []
-
         for _ in range(cfg.eval_iters):
             loss = model_engine.eval_batch(it)  # iterator directly
             losses.append(loss.detach().float().cpu())
-
         out[split] = torch.stack(losses).mean().item()
-
-    model_engine.train()
     return out
 
 
 # training loop
 t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
-# TODO: raw_model is outdated, need version compatible with pipeline
-# raw_model = model_engine.module
-# running_mfu = -1.0
+running_mfu = -1.0
 
 # Debug memory snapshot passes
 if cfg.debug_memory:
