@@ -7,7 +7,7 @@ mkdir out/
 
 python /root/SparseTransformers/data/cifar.py
 
-mkdir data_dir
+mkdir data_dirs
 
 mv train.bin data_dir/
 mv val.bin data_dir/
@@ -41,6 +41,13 @@ export DEEPSPEED_COMM_BACKEND=nccl
 nvidia-smi topo -m
 
 cd SparseTransformers
+# pp stages 1 in config
 torchrun --nproc_per_node=1 train_pipeline_parallel.py
+# pp stages 1 in config => automatic data parallel ? 
+torchrun --nproc_per_node=2 train_pipeline_parallel.py
+
 
 torchrun --nproc_per_node=2 disttest.py
+
+
+deepspeed --num_gpus=2 train_pipeline_parallel.py --deepspeed_config=ds_config.json --pipeline-parallel-size=2 --steps=10
