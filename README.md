@@ -23,6 +23,7 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 
 
 #### TODO
+* It seems deepspeed is bugged/incompatible with docker, we can just use base pytorch pipelines? https://docs.pytorch.org/docs/stable/distributed.pipelining.html
 * Remove superfluous code from dense_pipeliny.py
 * Write proper dataloader for Pipeline Parallel training
 * Update generate_samples function for Pipeline Parallel
