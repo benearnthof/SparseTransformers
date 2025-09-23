@@ -18,7 +18,7 @@ from contextlib import nullcontext
 import torch
 import deepspeed
 from torch.utils.data import DataLoader
-# from deepspeed.utils import 
+import torch.distributed as dist
 from deepspeed.runtime.dataloader import RepeatingLoader, DeepSpeedDataLoader
 
 from data.memmapdataset import CIFAR10Dataset
@@ -39,8 +39,7 @@ def print_peak_memory(prefix, device):
     if device == 0:
         print(f"{prefix}: {torch.cuda.max_memory_allocated(device) // 1e6}MB ")
 
-# TODO: only one master_process
-master_process = True
+master_process = dist.get_rank() == 0
 seed_offset = 0
 
 if master_process:
@@ -90,7 +89,7 @@ print(gptconf)
 
 # pipeline expects iterators
 train_ds = CIFAR10Dataset(cfg, split="train")
-
+# TODO: actually pass val_ds to validation functions xd
 val_ds = CIFAR10Dataset(cfg, split="val")
 
 # build pipeline model
@@ -126,38 +125,26 @@ else:
     print("Training from scratch.")
     checkpoint = None
 
+# quick helper to set up iterators for auxiliary functions
+def get_iterator(ds, cfg, split):
+    bs = cfg.batch_size if split=="train" else cfg.eval_batchsize
+    dta = ds(cfg, split=split)
+    dl= DataLoader(dta, batch_size=bs)
+    return iter(RepeatingLoader(dl))
 
 # helps estimate an arbitrarily accurate loss over either split using many batches
-step = 0
-k = 0
-split = "train"
-
-ds = CIFAR10Dataset(cfg, split=split)
-dl = DataLoader(ds, 4, pin_memory=True)
-it = iter(RepeatingLoader(dl))
-
-data = next(iter(dl))
-data[0] = data[0].to(model_engine.device)
-data = data[0]
-model_engine.module(data)
-
-loss = model_engine.eval_batch(iter(training_loader))  # iterator directly
-
 # TODO: pass keep_prob = 1 to PLD during eval
 @torch.no_grad()
 def estimate_loss():
     out = {}
     for split in ["train", "val"]:
-        ds = CIFAR10Dataset(cfg, split=split)
-        dl = DataLoader(ds, batch_size=cfg.eval_batchsize)
-        it = iter(RepeatingLoader(dl))
+        it = get_iterator(CIFAR10Dataset, cfg, split)
         losses = []
         for _ in range(cfg.eval_iters):
             loss = model_engine.eval_batch(it)  # iterator directly
             losses.append(loss.detach().float().cpu())
         out[split] = torch.stack(losses).mean().item()
     return out
-
 
 # training loop
 t0 = time.time()
@@ -167,15 +154,10 @@ running_mfu = -1.0
 # Debug memory snapshot passes
 if cfg.debug_memory:
     torch.cuda.memory._record_memory_history(max_entries=100000)
-    probe_ds = CIFAR10Dataset(cfg, split="train")
-    probe_dl = torch.utils.data.DataLoader(
-        probe_ds, batch_size=None, num_workers=0, pin_memory=True
-    )
-    data = next(iter(probe_dl))
+    it = get_iterator(CIFAR10Dataset, cfg, split)
     for _ in range(2):
         with ctx:
-            # TODO: expects iterator, not data
-            loss = model_engine.train_batch(data)
+            loss = model_engine.train_batch(it)
     # Dump snapshot to disk
     try: # TODO: update filenames for DeepSpeed
         fname = f"layers_{cfg.n_layer}_remat_{0}_batchsize_{cfg.batch_size}.pickle"
@@ -184,7 +166,6 @@ if cfg.debug_memory:
         print(f"[Memory Debug] Dumped CUDA snapshot to {fname}")
     except Exception as e:
         print(f"[Memory Debug] Failed to capture memory snapshot: {e}")
-
     torch.cuda.memory._record_memory_history(enabled=None)
 
 # logging
