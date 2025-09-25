@@ -23,11 +23,9 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 
 
 #### TODO
-* It seems deepspeed is bugged/incompatible with docker, we can just use base pytorch pipelines? https://docs.pytorch.org/docs/stable/distributed.pipelining.html
-* Remove superfluous code from dense_pipeliny.py
-* Write proper dataloader for Pipeline Parallel training
-* Update generate_samples function for Pipeline Parallel
-* Update mfu function for Pipeline Parallel 
+* Split config into model.yaml and ds_config.json
+* Reintegrate sampling, logging and checkpointing into pipeline parallel training
+* Calculate mfu via samples/sec
 * Remove hardcoded paths from utils & train script
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
@@ -53,11 +51,9 @@ for pn, p in self.named_parameters():
 ```
 
 #### TODO
-* Vanilla Implementation of DeepSpeed features
 * Gradient Clipping should be passed as config argument for DeepSpeed
 * Sparse Attention should be passed as config argument for DeepSpeed, after updating the nn modules accordingly: https://www.deepspeed.ai/tutorials/sparse-attention/
-* Curriculum learning & Random Layerwise Token Dropping for data efficiency https://www.deepspeed.ai/tutorials/data-efficiency/
-* Maybe do full picotron style implementation of 4D parallelism https://github.com/huggingface/picotron/tree/main
+* Curriculum learning & Random Layerwise Token Dropping for data efficiency https://www.deepspeed.ai/tutorials/data-efficiency/  
 * Visualize positional encodings to clarify what's going on  
 * Try training with sparse pytorch implementation & torch.compile  
 * Implement blocksparse CUDA kernels
@@ -65,8 +61,10 @@ for pn, p in self.named_parameters():
 * add other masking variants (bidirectional training should only require adding a couple lines of code)  
 * Data augmentation à la https://arxiv.org/abs/1909.13719  
 * Learning rate scaling with batch size https://arxiv.org/pdf/1706.02677  
-* Weight init with truncated Gaussian https://arxiv.org/pdf/1803.01719  
+* Weight init with truncated Gaussian https://arxiv.org/pdf/1803.01719  (Torchtitan llama3 implements this)
 * Try the GPT-2 style architecture from https://proceedings.mlr.press/v119/chen20s/chen20s.pdf
+* MQA or GQA https://arxiv.org/abs/1911.02150 & https://arxiv.org/pdf/2305.13245 for better efficiency
+* FP8 is supported on H100+ with TransformerEngine: https://github.com/NVIDIA/TransformerEngine
 * FP4 All the Way: Fully Quantized Training of LLMs https://arxiv.org/pdf/2505.19115  
 * Memory efficient finetuning with LoRA/QLoRA
 * Parameter sharding during finetuning (https://www.youtube.com/watch?v=xzBcBJ8_rzM) FSDP  
@@ -74,6 +72,7 @@ for pn, p in self.named_parameters():
 * AdamW8bit/4bit etc. api https://openreview.net/pdf?id=nN8TnHB5nw
 * Activation CPU offloading with streams (torchtune OffloadActivations context manager)
 * https://github.com/pytorch/ao
+* Port project to torchtitan  
 
 ### Visualization
 #### TODO
