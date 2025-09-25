@@ -19,7 +19,8 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * Custom positional encodings for image data, see section below.
 * GPU memory profiling can be enabled with `debug_memory` in config.
 * To visualize the .pickle files this produces head over to [https://docs.pytorch.org/memory_viz](https://docs.pytorch.org/memory_viz)
-* Zero Redundancy Optimizers (1-3) are available via DeepSpeed Training  
+* Zero Redundancy Optimizers (1-3) are available via DeepSpeed Training
+* Pipeline Parallel training is available via DeepSpeed (Not compatible with ZeRO-2 and ZeRO-3)
 
 
 #### TODO
@@ -29,10 +30,8 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 * Remove hardcoded paths from utils & train script
 * Compare Vanilla to FlashAttention on different hardware  
 * Examine impact of batch size on training, as larger batch sizes may be beneficial for transformers, but gradient accumulation & activation checkpointing do have small performance drawbacks.  
-* Some GPUs may require NCCL_P2P_DISABLE=1 / export NCCL_P2P_LEVEL=NVL, write short script to determine settings
+* Add quickstart section to README
 * DeepSpeed Tensor Parallelism
-* DeepSpeed Pipeline Parallelism (Not compatible with ZeRO-2 and ZeRO-3)
-* Implement custom parallel models like picotron
 * Benchmark DeepSpeed settings  
 * Investigate tradeoff between CPU-AdamW vs FusedAdamW vs OneBitAdam vs ZeroOneAdam; Investigate Lamb vs OnebitLamb
 
