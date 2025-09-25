@@ -16,9 +16,14 @@ export TORCH_NCCL_BLOCKING_WAIT=1
 export NCCL_ASYNC_ERROR_HANDLING=1
 
 # minimal example to test pipeline parallelism
-# git clone https://github.com/deepspeedai/DeepSpeedExamples.git
+git clone https://github.com/deepspeedai/DeepSpeedExamples.git
 cd DeepSpeedExamples/training/pipeline_parallelism
+# No Parallelism
 deepspeed --num_gpus=1 train.py --deepspeed_config=ds_config.json -p 1 --steps=200
+# Data Parallelism
+deepspeed --num_gpus=2 train.py --deepspeed_config=ds_config.json -p 1 --steps=200
+# Pipeline Parallelism
+deepspeed --num_gpus=2 train.py --deepspeed_config=ds_config.json -p 2 --steps=200
 
 
 wget -c https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
@@ -49,31 +54,7 @@ mv val.bin data_dir/
 nvidia-smi topo -m
 
 cd SparseTransformers
-deepspeed --num_gpus=1 train_pipeline_parallel.py \
+deepspeed --num_gpus=2 train_pipeline_parallel.py \
     --deepspeed_config=/config/ds_config.json \
-    -p 1 \
+    -p 2 \
     --steps=5000
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# pp stages 1 in config
-torchrun --nproc_per_node=1 train_pipeline_parallel.py
-# pp stages 1 in config => automatic data parallel ? 
-torchrun --nproc_per_node=2 train_pipeline_parallel.py
-
-
-torchrun --nproc_per_node=2 disttest.py
-
-
-deepspeed --num_gpus=2 train_pipeline_parallel.py --deepspeed_config=ds_config.json --pipeline-parallel-size=2 --steps=10
