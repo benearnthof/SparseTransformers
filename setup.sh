@@ -47,6 +47,7 @@ mv val.bin data_dir/
 nvidia-smi topo -m
 
 cd SparseTransformers
+# Testing on RTXA5000
 # No Parallelism: samples/sec: ~55
 deepspeed --num_gpus=1 train_pipeline_parallel.py \
     --deepspeed_config=/config/ds_config.json \
@@ -70,6 +71,19 @@ deepspeed --num_gpus=4 train_pipeline_parallel.py \
 
 # Bonus: 4xData Parallelism: samples/sec: 200
 deepspeed --num_gpus=4 train_pipeline_parallel.py \
+    --deepspeed_config=/config/ds_config.json \
+    -p 1 \
+    --steps=1000
+
+# Testing 128 layer vanilla model on 1xH200 SXM
+# No ZeRO, no checkpointing, no other optimizations
+# No Parallelism:
+# batch_size: 4; samples/sec: 12.2; HBM: 16GB 
+# batch_size: 16; samples/sec: 29.1; HBM: 43GB 
+# batch_size: 32; samples/sec: 35.2; HBM: 80GB 
+# batch_size: 48; samples/sec: 37.6; HBM: 115GB
+
+deepspeed --num_gpus=1 train_pipeline_parallel.py \
     --deepspeed_config=/config/ds_config.json \
     -p 1 \
     --steps=1000

@@ -25,7 +25,7 @@ block_size: 3072
 
 # model
 # For testing purposes
-n_layer: 16
+n_layer: 128
 n_head: 2
 n_embd: 256
 # mlp_dim is multiplier: 2 => mlp_dimension = 2 * n_embed
