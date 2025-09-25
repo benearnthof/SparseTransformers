@@ -18,14 +18,17 @@ export NCCL_ASYNC_ERROR_HANDLING=1
 # minimal example to test pipeline parallelism
 git clone https://github.com/deepspeedai/DeepSpeedExamples.git
 cd DeepSpeedExamples/training/pipeline_parallelism
-# No Parallelism
+# Throughput on 1-4 RTX A5000 24GB
+# No Parallelism: samples/sec: 1150
 deepspeed --num_gpus=1 train.py --deepspeed_config=ds_config.json -p 1 --steps=200
-# Data Parallelism
+# Data Parallelism: samples/sec: 1900
 deepspeed --num_gpus=2 train.py --deepspeed_config=ds_config.json -p 1 --steps=200
-# Pipeline Parallelism
+# Pipeline Parallelism: samples/sec: 1100
 deepspeed --num_gpus=2 train.py --deepspeed_config=ds_config.json -p 2 --steps=200
+# Data & Pipeline Parallelism: samples/sec: 2000
+deepspeed --num_gpus=4 train.py --deepspeed_config=ds_config.json -p 2 --steps=200
 
-
+cd ~
 wget -c https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
 tar -xvzf cifar-10-python.tar.gz
 
@@ -38,23 +41,35 @@ mkdir data_dir
 mv train.bin data_dir/
 mv val.bin data_dir/
 
-# make sure to export these on new GPU nodes
-# export DEEPSPEED_COMM_BACKEND=nccl
-# export NCCL_DEBUG=INFO
-# for A5000 GPUs
-# export NCCL_P2P_DISABLE=1
-# export NCCL_P2P_LEVEL=NVL
-# export NCCL_SOCKET_IFNAME=ens1
-# export NCCL_P2P_LEVEL=SYS
-# # for multinode? 
-
 # TODO: move wandb logging to beginning of train file so we log full debug info
 # wandb init
 
 nvidia-smi topo -m
 
 cd SparseTransformers
+# No Parallelism: samples/sec: ~55
+deepspeed --num_gpus=1 train_pipeline_parallel.py \
+    --deepspeed_config=/config/ds_config.json \
+    -p 1 \
+    --steps=1000
+# Data Parallelism: samples/sec: ~105
+deepspeed --num_gpus=2 train_pipeline_parallel.py \
+    --deepspeed_config=/config/ds_config.json \
+    -p 1 \
+    --steps=1000
+# Pipeline Parallelism: samples/sec: ~55
 deepspeed --num_gpus=2 train_pipeline_parallel.py \
     --deepspeed_config=/config/ds_config.json \
     -p 2 \
-    --steps=5000
+    --steps=1000
+# Data & Pipeline Parallelism: samples/sec: ~105
+deepspeed --num_gpus=4 train_pipeline_parallel.py \
+    --deepspeed_config=/config/ds_config.json \
+    -p 2 \
+    --steps=1000
+
+# Bonus: 4xData Parallelism: samples/sec: 200
+deepspeed --num_gpus=4 train_pipeline_parallel.py \
+    --deepspeed_config=/config/ds_config.json \
+    -p 1 \
+    --steps=1000
