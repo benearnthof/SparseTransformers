@@ -159,28 +159,11 @@ We initialize the token embedding $W_e$ from $\mathcal{N}\left(0, \frac{0.125}{\
 
 ## Training & GPU Considerations
 ### Overfitting the Baseline
-cifar-10-overfit.yaml produces a 7,488,256 parameter model, using about 7GB of GPU HBM.  
-Dense Attention (flashattention) with full training config uses ~58GB on a A100 80GB at batch size 16 for CIFAR-10.  
+# Testing 128 layer vanilla model on 1xH200 SXM without ZeRO, checkpointing, or any other optimizations yields the following throughput:  
+batch_size: 4; samples/sec: 12.2; HBM: 16GB  
+batch_size: 16; samples/sec: 29.1; HBM: 43GB  
+batch_size: 32; samples/sec: 35.2; HBM: 80GB  
+batch_size: 48; samples/sec: 37.6; HBM: 115GB  
 
-For activation checkpointing at batch size 16 peak memory usage is as follows:  
-
-| Remat Steps | Peak HBM |
-|-------------|----------|
-| 1           | 58 GB    |
-| 2           | 33 GB    |
-| 4           | 19 GB    |
-| 8           | 13 GB    |  
-
-Activation checkpointing achieves the following throughput  
-
-| Remat Steps | Max Batchsize | Peak HBM | Time/Batch | Time/Epoch |
-|-------------|------------|----------|------------|------------|
-| 1           | 16         | 58GB     | 910ms      | 0.79h      |
-| 2           | 32         | 59GB     | 1850ms     | 0.80h      |
-| 4           | 64         | 60GB     | 3780ms     | 0.82h      |
-| 8           | 128        | 63GB     | 7780ms     | 0.84h      |  
-
-The optimizer state seems to take up around 5 GB.  
-
-This brings the total training time (without early stopping) on an 8xA100 80GB node to about 18 hours and 45 minutes, which, as of September 2025, yields a cost of around $250 depending on the cloud GPU provider. The number of activation checkpoints can be set in the model config.  
-I will do some more benchmarks to look at the performance per dollar of various other GPUs, low-demand options like the RTX A6000 48GB could be a sensible middle ground.  
+This brings the total training time (without early stopping) for 5760000 on an 8xH200 SXM 141GB node to about (5760000/(37.6*8)) ~= 19150 seconds or 5.32 hours, which, as of September 2025, yields a cost of around $162 depending on the cloud GPU provider.
+I will do some more benchmarks to look at the performance impact of various techniques, on high performance GPUs and tiny datasets like CIFAR-10 activation checkpointing may yield net throughput gains. Results are preliminary.  
