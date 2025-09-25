@@ -7,22 +7,10 @@ import torch.distributed as dist
 import deepspeed
 from torch.utils.data import DataLoader
 
-from data.memmapdataset import CIFAR10Dataset, get_args
+from data.memmapdataset import CIFAR10Dataset, get_args, pipeline_trainset
 from modules.dense import GPTConfig
 from modules.pipeline import GPTPipe
 
-def create_dataloader(cfg, split="train"):
-    """Create a simple DataLoader for DeepSpeed"""
-    dataset = CIFAR10Dataset(cfg, split=split)
-    loader = DataLoader(
-        dataset,
-        batch_size=cfg.batch_size,
-        sampler=None,
-        num_workers=0,
-        pin_memory=True,
-        drop_last=True
-    )
-    return loader
 
 def train_pipe(args, cfg):
     torch.manual_seed(args.seed)
@@ -49,14 +37,14 @@ def train_pipe(args, cfg):
     model = GPTPipe(gptconf)
 
     # Create data loader
-    train_loader = create_dataloader(cfg, "train")
+    trainset = pipeline_trainset(args.local_rank, cfg, split="train")
 
     # Initialize DeepSpeed - CRITICAL: Use the correct argument names
-    model_engine, optimizer, train_loader, _ = deepspeed.initialize(
+    model_engine, _, _, _ = deepspeed.initialize(
         # args=args,
         model=model,
-        training_data=train_loader,
-        config = "ds_config.json"  # Pass config directly
+        training_data=trainset,
+        config = "/root/SparseTransformers/config/ds_config.json"  # Pass config directly
     )
 
     # Training loop
@@ -67,16 +55,18 @@ def train_pipe(args, cfg):
 
 if __name__ == '__main__':
     args = get_args()
-    
+    # args.pipeline_parallel_size = 1
     # Initialize distributed backend first
+    print(args)
     deepspeed.init_distributed(dist_backend=args.backend)
-    
+    print("xd")
     # Set device
     args.local_rank = int(os.environ.get('LOCAL_RANK', 0))
     torch.cuda.set_device(args.local_rank)
     
     # Load config
     cfg = OmegaConf.load("./config/DS-Pipeline-16.yaml")
+    print(cfg)
     
     # Ensure pipeline stages match CLI argument
     cfg.deepspeed.pipeline_parallel_stages = args.pipeline_parallel_size

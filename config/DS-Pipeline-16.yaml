@@ -56,13 +56,6 @@ deepspeed:
   pp_partition_method: "uniform"
   pp_activation_checkpoint_interval: 0
   # Scheduler
-  scheduler: # WarmupCosineLR
-    type: WarmupCosineLR
-    params:
-      total_num_steps: 5000 # total number of training steps
-      warmup_min_ratio: 0.000035 # warmup start learning rate, should be ~ learning_rate/10 per Chinchilla
-      warmup_num_steps: 500 # number of steps to warm up for
-      warmup_type: linear # either log or linear warmup
   # ZeRO
   zero_optimization: # Pipeline Parallelism is not compatible with ZeRO-2 and ZeRO-3
     stage: 0 # [0, 1, 2, 3] refers to disabled, optimizer state partitioning, + gradient state partitioning, + parameter partitioning, respectively
