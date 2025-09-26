@@ -16,17 +16,17 @@ export TORCH_NCCL_BLOCKING_WAIT=1
 export NCCL_ASYNC_ERROR_HANDLING=1
 
 # minimal example to test pipeline parallelism
-git clone https://github.com/deepspeedai/DeepSpeedExamples.git
-cd DeepSpeedExamples/training/pipeline_parallelism
-# Throughput on 1-4 RTX A5000 24GB
-# No Parallelism: samples/sec: 1150
-deepspeed --num_gpus=1 train.py --deepspeed_config=ds_config.json -p 1 --steps=200
-# Data Parallelism: samples/sec: 1900
-deepspeed --num_gpus=2 train.py --deepspeed_config=ds_config.json -p 1 --steps=200
-# Pipeline Parallelism: samples/sec: 1100
-deepspeed --num_gpus=2 train.py --deepspeed_config=ds_config.json -p 2 --steps=200
-# Data & Pipeline Parallelism: samples/sec: 2000
-deepspeed --num_gpus=4 train.py --deepspeed_config=ds_config.json -p 2 --steps=200
+# git clone https://github.com/deepspeedai/DeepSpeedExamples.git
+# cd DeepSpeedExamples/training/pipeline_parallelism
+# # Throughput on 1-4 RTX A5000 24GB
+# # No Parallelism: samples/sec: 1150
+# deepspeed --num_gpus=1 train.py --deepspeed_config=ds_config.json -p 1 --steps=200
+# # Data Parallelism: samples/sec: 1900
+# deepspeed --num_gpus=2 train.py --deepspeed_config=ds_config.json -p 1 --steps=200
+# # Pipeline Parallelism: samples/sec: 1100
+# deepspeed --num_gpus=2 train.py --deepspeed_config=ds_config.json -p 2 --steps=200
+# # Data & Pipeline Parallelism: samples/sec: 2000
+# deepspeed --num_gpus=4 train.py --deepspeed_config=ds_config.json -p 2 --steps=200
 
 cd ~
 wget -c https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
