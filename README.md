@@ -25,6 +25,8 @@ The paper trained for 120 epochs of 48k images each (5760000 samples total) so r
 
 #### TODO
 * Split config into model.yaml and ds_config.json
+* Port configs to accommodate llama: GQA & rest of args
+* Write pipeline steps with llama components
 * Reintegrate sampling, logging and checkpointing into pipeline parallel training
 * Calculate mfu via samples/sec
 * Remove hardcoded paths from utils & train script
