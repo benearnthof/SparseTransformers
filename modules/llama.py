@@ -7,6 +7,7 @@ https://github.com/deepspeedai/DeepSpeed/blob/master/deepspeed/sequence/layer.py
 We should be able to drop in DistributedAttention with minimal changes:
 https://www.deepspeed.ai/tutorials/ds-sequence/
 """
+import math
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -43,7 +44,7 @@ class Attention(nn.Module):
     Multi-head attention with GQA/MQA flexibility. To recover vanilla MHA set n_kv_heads to `None`.
 
     Args:
-        config: OmegaConf dict of model specification.
+        cfg: OmegaConf dict of model specification.
     
     Attributes: 
         n_kv_heads (int): Number of key and value heads.
@@ -56,17 +57,17 @@ class Attention(nn.Module):
         wo (nn.Linear): Linear layer for output.
     """
 
-    def __init__(self, config):
+    def __init__(self, cfg):
         super().__init__()
         self.n_heads = cfg.n_heads
         self.n_kv_heads = cfg.n_heads if cfg.n_kv_heads is None else cfg.n_kv_heads
         self.n_rep = self.n_heads // self.n_kv_heads
         # we ditch half-size qk_dim since we now use GQA
         self.head_dim = cfg.dim // cfg.n_heads
-        self.wq = nn.Linear(model_args.dim, model_args.n_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(model_args.dim, self.n_kv_heads * self.head_dim, bias=False)
-        self.wv = nn.Linear(model_args.dim, self.n_kv_heads * self.head_dim, bias=False)
-        self.wo = nn.Linear(model_args.n_heads * self.head_dim, model_args.dim, bias=False)
+        self.wq = nn.Linear(cfg.dim, cfg.n_heads * self.head_dim, bias=False)
+        self.wk = nn.Linear(cfg.dim, self.n_kv_heads * self.head_dim, bias=False)
+        self.wv = nn.Linear(cfg.dim, self.n_kv_heads * self.head_dim, bias=False)
+        self.wo = nn.Linear(cfg.n_heads * self.head_dim, cfg.dim, bias=False)
         # torch spda already applies dropout for us
         # torchtitan wraps this with device specific backend, DeepSpeed already does this for us (?)
         self.spda = ScaledDotProductAttention()
@@ -99,3 +100,213 @@ class Attention(nn.Module):
         output = output.view(bs, seqlen, -1)
         return self.wo(output)
 
+
+class MLP(nn.Module):
+    """
+    MLP module
+    Implements Gated Linear Units: https://arxiv.org/pdf/1612.08083
+    Specifically, the SwiGLU variant proposed in: https://arxiv.org/pdf/2002.05202
+
+    Args:
+        dim (int): Input dimension.
+        hidden_dim (int): Hidden dimension of the feedforward layer.
+        multiple_of (int): Value to ensure hidden dimension is a multiple of this value.
+        ffn_dim_multiplier (float | None): Custom multiplier for hidden dimension. Defaults to None.
+
+    Attributes:
+        w1 (Linear): Linear transformation for the first layer.
+        w2 (Linear): Linear transformation for the second layer.
+        w3 (Linear): Linear transformation for the third layer.
+
+    """
+
+    def __init__(self, dim:int, hidden_dim: int, multiple_of: int, ffn_dim_multiplier: float | None):
+        super().__init__()
+        hidden_dim = int(2 * hidden_dim / 3)
+        # custom dim factor multiplier
+        if ffn_dim_multiplier is not None:
+            hidden_dim = int(ffn_dim_multiplier * hidden_dim)
+        hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
+
+        self.w1 = nn.Linear(dim, hidden_dim, bias=False)
+        self.w2 = nn.Linear(hidden_dim, dim, bias=False)
+        self.w3 = nn.Linear(dim, hidden_dim, bias=False)
+
+    def forward(self, x):
+        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+
+    def init_weights(self, init_std: float):
+        nn.init.trunc_normal_(self.w1.weight, mean=0.0, std=0.125 / math.sqrt(linear.in_features))
+        for linear in (self.w2, self.w3):
+            nn.init.trunc_normal_(linear.weight, mean=0.0, std=init_std) # depth dependent init
+    
+
+
+
+
+class Block(nn.Module):
+    """
+    TransformerBlock Module
+
+    Args:
+        layer_id (int): Identifier for the layer, for layer-wise init.
+        cfg (DictConfig): Model configuration arguments.
+
+    Attributes:
+        n_heads (int): Number of attention heads.
+        dim (int): Dimension size of the model.
+        head_dim (int): Dimension size of each attention head.
+        attention (Attention): Attention module.
+        feed_forward (MLP): MLP module.
+        layer_id (int): Identifier for the layer.
+        attention_norm (RMSNorm): Layer normalization for attention output.
+        ffn_norm (RMSNorm): Layer normalization for feedforward output.
+    """
+
+    def __init__(self, cfg, layer_id):
+        super().__init__()
+        self.n_heads = cfg.n_heads
+        self.dim = cfg.dim
+        self.attention = Attention(cfg)
+        self.mlp = MLP(
+            dim=cfg.dim,
+            hidden_dim=4 * cfg.dim,
+            multiple_of=cfg.multiple_of,
+            ffn_dim_multiplier=cfg.ffn_dim_multiplier,
+        )
+        self.attention_norm = nn.RMSNorm(cfg.dim, eps=cfg.norm_eps)
+        self.ffn_norm = nn.RMSNorm(cfg.dim, eps=cfg.norm_eps)
+
+        if cfg.depth_init:
+            self.weight_init_std = 0.02 / (2 * (layer_id + 1)) ** 0.5
+        else:
+            self.weight_init_std = 0.02 / (2 * cfg.n_layers) ** 0.5
+
+    def forward(self, x: torch.Tensor):
+            """
+            Perform a forward pass through the TransformerBlock.
+
+            Args:
+                x (torch.Tensor): Input tensor.
+
+            Returns:
+                torch.Tensor: Output tensor after applying attention and feedforward layers.
+            """
+            # prenorm
+            h = x + self.attention(self.attention_norm(x))
+            out = h + self.mlp(self.ffn_norm(h))
+            return out
+
+        def init_weights(self):
+            for norm in (self.attention_norm, self.ffn_norm):
+                norm.reset_parameters()
+            self.attention.init_weights(self.weight_init_std)
+            self.mlp.init_weights(self.weight_init_std)
+
+
+class GPT(nn.Module, ModelProtocol):
+    """
+    Transformer Module, for backwards compatibility
+
+    Args:
+        cfg (DictConfig): Model configuration arguments.
+
+    Attributes:
+        cfg (DictConfig): Model configuration arguments.
+        vocab_size (int): Vocabulary size.
+        n_layers (int): Number of layers in the model.
+        tok_embeddings (ParallelEmbedding): Token embeddings.
+        layers (torch.nn.ModuleList): List of Transformer blocks.
+        norm (RMSNorm): Layer normalization for the model output.
+        output (Linear): Linear layer for final output.
+    """
+
+    def __init__(self, cfg: DictConfig):
+        super().__init__()
+        self.cfg = cfg
+        self.vocab_size = cfg.vocab_size
+        self.n_layers = cfg.n_layers
+
+        self.tok_embeddings = nn.Embedding(cfg.vocab_size, cfg.dim)
+
+        self.row_emb = nn.Embedding(32, cfg.n_embd),  # 32 rows
+        self.col_emb = nn.Embedding(32, cfg.n_embd),  # 32 cols
+        self.chan_emb = nn.Embedding(3, cfg.n_embd),  # 3 channels (RGB)
+
+        self.layers = torch.nn.ModuleDict()
+        for layer_id in range(cfg.n_layers):
+            self.layers[str(layer_id)] = Block(layer_id, cfg)
+        self.norm = nn.RMSNorm(cfg.dim, eps=cfg.norm_eps)
+        self.output = nn.Linear(cfg.dim, cfg.vocab_size, bias=False)
+
+    def init_weights(
+        self,
+        buffer_device: torch.device | None = None,
+    ):
+        """
+        [Note: On ``init_weights`` vs. ``reset_parameters``]
+        Modules may define ``reset_parameters`` to initialize parameter values.
+        ``reset_parameters`` is meant to only initialize directly owned
+        parameters/buffers, not those of their child modules, and it can be
+        used to give the initial values for these tensors.
+        Separately, users may want custom initialization for their modules,
+        different from that in ``reset_parameters``. For this, we define
+        ``init_weights``. We only call it in the constructor of this
+        ``Transformer`` root module to avoid reinitializing tensors.
+        """
+        def _init_embedding(module):
+            n = module.num_embeddings
+            d = module.embedding_dim
+            # vocab embeddings are size 256, positional embeddings are size 32
+            if n > 32: # vocab embedding # TODO: set to 64 for imagenet?
+                std = 0.125 / math.sqrt(d)
+            else: # row/col/chan embeddings
+                n_emb = 3
+                std = 0.125 / math.sqrt(d * n_emb)
+            nn.init.normal_(module.weight, mean=0.0, std=std)
+
+        _init_embedding(self.tok_embeddings)
+        _init_embedding(self.row_emb)
+        _init_embedding(self.col_emb)
+        _init_embedding(self.chan_emb)
+        
+        # already performs custom init with truncated normal
+        for layer in self.layers.values():
+            if layer is not None:
+                layer.init_weights()
+        if self.norm is not None:
+            self.norm.reset_parameters()
+        # final output layer is zero init in paper (End of section 6 in the paper)
+        torch.nn.init.zeros_(self.output.weight)
+        
+
+    def forward(self, x: torch.Tensor):
+        """
+        Perform a forward pass through the Transformer model.
+
+        Args:
+            x (torch.Tensor): Input tensor passed through the transformer.
+
+        Returns:
+            torch.Tensor: Output logits after applying the Transformer model.
+        """
+        device = x.device
+        b, t = x.size()
+        tok_emb = self.tok_embeddings(x)
+        H, W, C = 32, 32, 3
+        positions = torch.arange(t, device=device)
+        chans = positions // (H * W)                 # 0..2
+        rows  = (positions % (H * W)) // W           # 0..31
+        cols  = positions % W              
+        row_emb = self.row_emb(rows)[None, :, :].expand(b, -1, -1)
+        col_emb = self.col_emb(cols)[None, :, :].expand(b, -1, -1)
+        chan_emb = self.chan_emb(chans)[None, :, :].expand(b, -1, -1)
+
+        h = (tok_emb + row_emb + col_emb + chan_emb)
+
+        for layer in self.layers.values():
+            h = layer(h)
+
+        h = self.norm(h) if self.norm else h
+        output = self.output(h) if self.output else h
+        return output
