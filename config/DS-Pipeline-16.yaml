@@ -2,6 +2,7 @@
 # I/O
 # very overkill config for a 59M parameter baseline. 
 debug_memory: True
+data_dir: "/workspace/data_dir"
 out_dir: out
 eval_interval: 500
 log_interval: 10
@@ -25,7 +26,7 @@ block_size: 3072
 
 # model
 # For testing purposes
-n_layer: 128
+n_layer: 16
 n_head: 2
 n_embd: 256
 # mlp_dim is multiplier: 2 => mlp_dimension = 2 * n_embed

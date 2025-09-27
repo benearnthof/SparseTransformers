@@ -1,0 +1,10 @@
+depth_init: null
+dim: null
+ffn_dim_multiplier: null
+multiple_of: null
+n_embd: null
+n_heads: null
+n_kv_heads: null
+n_layers: null
+norm_eps: null
+vocab_size: null

@@ -23,10 +23,6 @@ class ScaledDotProductAttention(torch.nn.Module):
         return F.scaled_dot_product_attention(q, k, v, is_causal=True)
 
 
-
-
-# We switch to RMSNorm: https://arxiv.org/pdf/1910.07467
-
 def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
     """repeat_interleave for GQA"""
     bs, slen, n_kv_heads, head_dim = x.shape
@@ -147,6 +143,7 @@ class MLP(nn.Module):
 class Block(nn.Module):
     """
     TransformerBlock Module
+    Instead of the custom LayerNorm we switch over to RMSNorm https://arxiv.org/pdf/1910.07467
 
     Args:
         layer_id (int): Identifier for the layer, for layer-wise init.
@@ -159,7 +156,7 @@ class Block(nn.Module):
         attention (Attention): Attention module.
         feed_forward (MLP): MLP module.
         layer_id (int): Identifier for the layer.
-        attention_norm (RMSNorm): Layer normalization for attention output.
+        attention_norm (RMSNorm): Layer normalization for attention output. 
         ffn_norm (RMSNorm): Layer normalization for feedforward output.
     """
 
@@ -192,16 +189,16 @@ class Block(nn.Module):
             Returns:
                 torch.Tensor: Output tensor after applying attention and feedforward layers.
             """
-            # prenorm
+            # prenorm implementation
             h = x + self.attention(self.attention_norm(x))
             out = h + self.mlp(self.ffn_norm(h))
             return out
 
-        def init_weights(self):
-            for norm in (self.attention_norm, self.ffn_norm):
-                norm.reset_parameters()
-            self.attention.init_weights(self.weight_init_std)
-            self.mlp.init_weights(self.weight_init_std)
+    def init_weights(self):
+        for norm in (self.attention_norm, self.ffn_norm):
+            norm.reset_parameters()
+        self.attention.init_weights(self.weight_init_std)
+        self.mlp.init_weights(self.weight_init_std)
 
 
 class GPT(nn.Module, ModelProtocol):
@@ -239,10 +236,7 @@ class GPT(nn.Module, ModelProtocol):
         self.norm = nn.RMSNorm(cfg.dim, eps=cfg.norm_eps)
         self.output = nn.Linear(cfg.dim, cfg.vocab_size, bias=False)
 
-    def init_weights(
-        self,
-        buffer_device: torch.device | None = None,
-    ):
+    def init_weights(self, buffer_device: torch.device | None = None):
         """
         [Note: On ``init_weights`` vs. ``reset_parameters``]
         Modules may define ``reset_parameters`` to initialize parameter values.

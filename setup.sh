@@ -1,5 +1,5 @@
 # TODO: move to /workspace
-python3 -m venv venv && source venv/bin/activate
+python3 -m venv tiny && source tiny/bin/activate
 python -m pip install --upgrade pip
 
 pip install "torch==2.7.1" "torchvision==0.22.1" "torchaudio==2.7.1" \
@@ -28,13 +28,12 @@ export NCCL_ASYNC_ERROR_HANDLING=1
 # # Data & Pipeline Parallelism: samples/sec: 2000
 # deepspeed --num_gpus=4 train.py --deepspeed_config=ds_config.json -p 2 --steps=200
 
-cd ~
 wget -c https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
 tar -xvzf cifar-10-python.tar.gz
 
 mkdir out/
 
-python /root/SparseTransformers/data/cifar.py
+python /workspace/SparseTransformers/data/cifar.py
 
 mkdir data_dir
 
@@ -46,6 +45,7 @@ mv val.bin data_dir/
 
 nvidia-smi topo -m
 
+# execute these in the SparseTransformers source directory
 cd SparseTransformers
 # Testing on RTXA5000
 # No Parallelism: samples/sec: ~55

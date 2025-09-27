@@ -44,7 +44,7 @@ def train_pipe(args, cfg):
         # args=args,
         model=model,
         training_data=trainset,
-        config = "/root/SparseTransformers/config/ds_config.json"  # Pass config directly
+        config = "./config/ds_config.json"  # Pass config directly
     )
 
     # Training loop

@@ -23,11 +23,11 @@ class MemmapIterableDataset(IterableDataset):
     pin_memory=True for faster host -> device transfer
     worker_init_fn / dataset.open_memmap() in __iter__ to open memmap per worker 
     """
-    def __init__(self, cfg, root="/root/data_dir", split="train"):
+    def __init__(self, cfg, split="train"):
         super().__init__()
         self.cfg = cfg
         self.split = split
-        self.filepath = os.path.join(root, f"{split}.bin")
+        self.filepath = os.path.join(cfg.data_dir, f"{split}.bin")
         self._len = None
 
     def _get_len(self):
@@ -80,11 +80,11 @@ class CIFAR10Dataset(Dataset):
     """
     Basic PyTorch Dataset that returns CIFAR-10 Image tensor stacks
     """
-    def __init__(self, cfg, root="/root/data_dir", split="train"):
+    def __init__(self, cfg, split="train"):
         super().__init__()
         self.cfg = cfg
         self.split = split
-        self.filepath = os.path.join(root, f"{split}.bin")
+        self.filepath = os.path.join(cfg.data_dir, f"{split}.bin")
 
     def __len__(self):
         # everything is stored in raw bytes => file_size // block_size = number of images
