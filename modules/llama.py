@@ -9,9 +9,11 @@ https://www.deepspeed.ai/tutorials/ds-sequence/
 """
 import math
 import torch
-import torch.nn.functional as F
 from torch import nn
+import torch.nn.functional as F
 
+from omegaconf import DictConfig
+from dataclasses import dataclass
 
 class ScaledDotProductAttention(torch.nn.Module):
     # helper module for compact attention implementation
@@ -66,7 +68,7 @@ class Attention(nn.Module):
         self.wo = nn.Linear(cfg.n_heads * self.head_dim, cfg.dim, bias=False)
         # torch spda already applies dropout for us
         # torchtitan wraps this with device specific backend, DeepSpeed already does this for us (?)
-        self.spda = ScaledDotProductAttention()
+        self.sdpa = ScaledDotProductAttention()
 
     def init_weights(self, init_std: float):
         for linear in (self.wq, self.wk, self.wv):
@@ -137,9 +139,6 @@ class MLP(nn.Module):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=init_std) # depth dependent init
     
 
-
-
-
 class Block(nn.Module):
     """
     TransformerBlock Module
@@ -160,19 +159,19 @@ class Block(nn.Module):
         ffn_norm (RMSNorm): Layer normalization for feedforward output.
     """
 
-    def __init__(self, cfg, layer_id):
+    def __init__(self, layer_id, cfg):
         super().__init__()
         self.n_heads = cfg.n_heads
         self.dim = cfg.dim
         self.attention = Attention(cfg)
         self.mlp = MLP(
             dim=cfg.dim,
-            hidden_dim=4 * cfg.dim,
+            hidden_dim=cfg.dim,
             multiple_of=cfg.multiple_of,
             ffn_dim_multiplier=cfg.ffn_dim_multiplier,
         )
-        self.attention_norm = nn.RMSNorm(cfg.dim, eps=cfg.norm_eps)
-        self.ffn_norm = nn.RMSNorm(cfg.dim, eps=cfg.norm_eps)
+        self.attention_norm = nn.RMSNorm(cfg.dim)
+        self.ffn_norm = nn.RMSNorm(cfg.dim)
 
         if cfg.depth_init:
             self.weight_init_std = 0.02 / (2 * (layer_id + 1)) ** 0.5
@@ -200,8 +199,21 @@ class Block(nn.Module):
         self.attention.init_weights(self.weight_init_std)
         self.mlp.init_weights(self.weight_init_std)
 
+@dataclass
+class GPTConfig:
+    # TODO: readd dropout
+    depth_init: bool = True
+    dim: int = 256
+    ffn_dim_multiplier: int = 2
+    multiple_of: int = 128
+    n_embd: int = 256
+    n_heads: int = 2
+    n_kv_heads: int = 2
+    n_layers: int = 16
+    vocab_size: int = 256
 
-class GPT(nn.Module, ModelProtocol):
+
+class GPT(nn.Module):
     """
     Transformer Module, for backwards compatibility
 
@@ -212,7 +224,7 @@ class GPT(nn.Module, ModelProtocol):
         cfg (DictConfig): Model configuration arguments.
         vocab_size (int): Vocabulary size.
         n_layers (int): Number of layers in the model.
-        tok_embeddings (ParallelEmbedding): Token embeddings.
+        tok_emb (ParallelEmbedding): Token embeddings.
         layers (torch.nn.ModuleList): List of Transformer blocks.
         norm (RMSNorm): Layer normalization for the model output.
         output (Linear): Linear layer for final output.
@@ -224,16 +236,16 @@ class GPT(nn.Module, ModelProtocol):
         self.vocab_size = cfg.vocab_size
         self.n_layers = cfg.n_layers
 
-        self.tok_embeddings = nn.Embedding(cfg.vocab_size, cfg.dim)
+        self.tok_emb = nn.Embedding(cfg.vocab_size, cfg.dim)
 
-        self.row_emb = nn.Embedding(32, cfg.n_embd),  # 32 rows
-        self.col_emb = nn.Embedding(32, cfg.n_embd),  # 32 cols
-        self.chan_emb = nn.Embedding(3, cfg.n_embd),  # 3 channels (RGB)
+        self.row_emb = nn.Embedding(32, cfg.n_embd)  # 32 rows
+        self.col_emb = nn.Embedding(32, cfg.n_embd)  # 32 cols
+        self.chan_emb = nn.Embedding(3, cfg.n_embd)  # 3 channels (RGB)
 
         self.layers = torch.nn.ModuleDict()
         for layer_id in range(cfg.n_layers):
             self.layers[str(layer_id)] = Block(layer_id, cfg)
-        self.norm = nn.RMSNorm(cfg.dim, eps=cfg.norm_eps)
+        self.norm = nn.RMSNorm(cfg.dim)
         self.output = nn.Linear(cfg.dim, cfg.vocab_size, bias=False)
 
     def init_weights(self, buffer_device: torch.device | None = None):
@@ -259,7 +271,7 @@ class GPT(nn.Module, ModelProtocol):
                 std = 0.125 / math.sqrt(d * n_emb)
             nn.init.normal_(module.weight, mean=0.0, std=std)
 
-        _init_embedding(self.tok_embeddings)
+        _init_embedding(self.tok_emb)
         _init_embedding(self.row_emb)
         _init_embedding(self.col_emb)
         _init_embedding(self.chan_emb)
@@ -286,7 +298,7 @@ class GPT(nn.Module, ModelProtocol):
         """
         device = x.device
         b, t = x.size()
-        tok_emb = self.tok_embeddings(x)
+        tok_emb = self.tok_emb(x)
         H, W, C = 32, 32, 3
         positions = torch.arange(t, device=device)
         chans = positions // (H * W)                 # 0..2
@@ -304,3 +316,14 @@ class GPT(nn.Module, ModelProtocol):
         h = self.norm(h) if self.norm else h
         output = self.output(h) if self.output else h
         return output
+
+# cfg = GPTConfig()
+# model = GPT(cfg)
+
+# n_params = sum(p.numel() for p in model.parameters())
+# n_params -= model.tok_emb.weight.numel()
+# n_params -= model.row_emb.weight.numel()
+# n_params -= model.col_emb.weight.numel()
+# n_params -= model.chan_emb.weight.numel()
+# n_params
+# 8986880 close enough to 7.51M since we don't use half size qk projections anymore

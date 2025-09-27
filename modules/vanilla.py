@@ -132,7 +132,7 @@ class Block(nn.Module):
 class GPTConfig:
     block_size: int = 3072
     vocab_size: int = 256 # 256 possible byte values
-    n_layer: int = 128
+    n_layer: int = 16
     n_head: int = 2
     n_embd: int = 256
     mlp_dim: int = 2

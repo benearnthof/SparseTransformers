@@ -1,3 +1,4 @@
+block_size: 3072 # needed for dataloader
 depth_init: null
 dim: null
 ffn_dim_multiplier: null
