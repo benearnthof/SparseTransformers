@@ -248,7 +248,7 @@ class GPT(nn.Module):
         self.norm = nn.RMSNorm(cfg.dim)
         self.output = nn.Linear(cfg.dim, cfg.vocab_size, bias=False)
 
-    def init_weights(self, buffer_device: torch.device | None = None):
+    def init_weights(self):
         """
         [Note: On ``init_weights`` vs. ``reset_parameters``]
         Modules may define ``reset_parameters`` to initialize parameter values.
@@ -282,7 +282,7 @@ class GPT(nn.Module):
                 layer.init_weights()
         if self.norm is not None:
             self.norm.reset_parameters()
-        # final output layer is zero init in paper (End of section 6 in the paper)
+        # final output layer is zero init (End of section 6 in the paper)
         torch.nn.init.zeros_(self.output.weight)
         
 

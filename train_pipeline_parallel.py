@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from data.memmapdataset import CIFAR10Dataset, get_args, pipeline_trainset
 from modules.dense import GPTConfig
-from modules.pipeline import GPTPipe
+from pipeline.dense import GPTPipe
 
 
 def train_pipe(args, cfg):
