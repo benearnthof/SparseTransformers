@@ -153,7 +153,6 @@ def get_lr(it):
 
 # training loop
 X, Y = get_batch('train') # fetch the very first batch
-t0 = time.time()
 
 if ddp:
     # raw_model used for logging/generation/estimate_mfu:
@@ -163,15 +162,14 @@ else:
 
 out, loss = model(X, Y)
 
+t0 = time.time()
 while True:
     # determine and set the learning rate for this iteration
     lr = get_lr(iter_num)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-    
     logits, loss = model(X, Y)
-
     # immediately async prefetch next batch while model is doing the forward pass on the GPU
     X, Y = get_batch('train')
 
