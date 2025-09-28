@@ -211,6 +211,11 @@ class GPTConfig:
     n_kv_heads: int = 2
     n_layers: int = 16
     vocab_size: int = 256
+    attn_dropout: float = 0.0
+    # TODO: add resid_dropout: float = 0.05
+    pipeline_parallel_stages: int = 1
+    pp_partition_method: str = "type:transformer"
+    pp_activation_checkpoint_interval: int = 0
 
 
 class GPT(nn.Module):

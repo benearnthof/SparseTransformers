@@ -19,7 +19,7 @@ import torch
 import deepspeed
 
 from modules.dense_pipeline import GPT, GPTConfig
-from utils import get_batch, generate_samples 
+from utils.train_utils import get_batch, generate_samples 
 
 deepspeed.init_distributed() 
 # TODO: pass this as commandline argument

@@ -59,7 +59,6 @@ if __name__ == '__main__':
     # Initialize distributed backend first
     print(args)
     deepspeed.init_distributed(dist_backend=args.backend)
-    print("xd")
     # Set device
     args.local_rank = int(os.environ.get('LOCAL_RANK', 0))
     torch.cuda.set_device(args.local_rank)

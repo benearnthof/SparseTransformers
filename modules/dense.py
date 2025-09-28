@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from utils import get_flops
+from utils.train_utils import get_flops
 
 import deepspeed
 from deepspeed.runtime.progressive_layer_drop import ProgressiveLayerDrop

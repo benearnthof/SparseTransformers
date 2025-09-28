@@ -87,3 +87,8 @@ deepspeed --num_gpus=1 train_pipeline_parallel.py \
     --deepspeed_config=/config/ds_config.json \
     -p 1 \
     --steps=1000
+
+deepspeed --num_gpus=1 train_llama_pipeline.py \
+    --deepspeed_config=/config/ds_config.json \
+    -p 1 \
+    --steps=1000

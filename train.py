@@ -18,7 +18,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from modules.vanilla import GPT, GPTConfig
-from utils import get_batch, generate_samples 
+from utils.train_utils import get_batch, generate_samples 
 
 # TODO: pass this as commandline argument
 cfg = OmegaConf.load(r"./config/ZeRO.yaml")

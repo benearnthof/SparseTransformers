@@ -167,6 +167,6 @@ class GPTPipe(PipelineModule):
             loss_fn=CustomCrossEntropyLoss(ignore_index=-1),
             num_stages=getattr(cfg, "pipeline_parallel_stages", 1),
             partition_method=getattr(cfg, "pp_partition_method", "type:transformer"),
-            seed_layers=True,
+            seed_layers=False, # ?
             activation_checkpoint_interval=getattr(cfg, "pp_activation_checkpoint_interval", 0),
         )
