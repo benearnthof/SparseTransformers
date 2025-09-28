@@ -134,7 +134,7 @@ class MLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
     def init_weights(self, init_std: float):
-        nn.init.trunc_normal_(self.w1.weight, mean=0.0, std=0.125 / math.sqrt(linear.in_features))
+        nn.init.trunc_normal_(self.w1.weight, mean=0.0, std=0.125 / math.sqrt(self.w1.in_features))
         for linear in (self.w2, self.w3):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=init_std) # depth dependent init
     
@@ -286,7 +286,7 @@ class GPT(nn.Module):
         torch.nn.init.zeros_(self.output.weight)
         
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, targets: torch.Tensor):
         """
         Perform a forward pass through the Transformer model.
 
@@ -314,8 +314,13 @@ class GPT(nn.Module):
             h = layer(h)
 
         h = self.norm(h) if self.norm else h
-        output = self.output(h) if self.output else h
-        return output
+        logits = self.output(h) if self.output else h
+        # logits.shape torch.Size([4, 3072, 256])
+        if targets is not None:
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+        else:
+            loss = None
+        return logits, loss
 
 # cfg = GPTConfig()
 # model = GPT(cfg)
